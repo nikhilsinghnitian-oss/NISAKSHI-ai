@@ -29,54 +29,79 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const session = await auth();
-  const result = await getUserAndConversation(session?.user?.email, id);
+  try {
+    const { id } = await params;
+    const session = await auth();
+    const result = await getUserAndConversation(session?.user?.email, id);
 
-  if ("error" in result) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
+    if ("error" in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+
+    return NextResponse.json({ conversation: result.conversation });
+  } catch (err: any) {
+    console.error("Error in GET /api/conversations/[id]:", err);
+    return NextResponse.json(
+      { error: err?.message || "Internal server error" },
+      { status: 500 }
+    );
   }
-
-  return NextResponse.json({ conversation: result.conversation });
 }
 
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const session = await auth();
-  const result = await getUserAndConversation(session?.user?.email, id);
+  try {
+    const { id } = await params;
+    const session = await auth();
+    const result = await getUserAndConversation(session?.user?.email, id);
 
-  if ("error" in result) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
+    if ("error" in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const title = String(body.title || "").trim();
+    if (!title) return NextResponse.json({ error: "Title required" }, { status: 400 });
+
+    const updated = await prisma.conversation.update({
+      where: { id },
+      data: { title, updatedAt: new Date() },
+    });
+
+    return NextResponse.json({ conversation: updated });
+  } catch (err: any) {
+    console.error("Error in PATCH /api/conversations/[id]:", err);
+    return NextResponse.json(
+      { error: err?.message || "Internal server error" },
+      { status: 500 }
+    );
   }
-
-  const body = await req.json().catch(() => ({}));
-  const title = String(body.title || "").trim();
-  if (!title) return NextResponse.json({ error: "Title required" }, { status: 400 });
-
-  const updated = await prisma.conversation.update({
-    where: { id },
-    data: { title, updatedAt: new Date() },
-  });
-
-  return NextResponse.json({ conversation: updated });
 }
 
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const session = await auth();
-  const result = await getUserAndConversation(session?.user?.email, id);
+  try {
+    const { id } = await params;
+    const session = await auth();
+    const result = await getUserAndConversation(session?.user?.email, id);
 
-  if ("error" in result) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
+    if ("error" in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+
+    await prisma.conversation.delete({ where: { id } });
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("Error in DELETE /api/conversations/[id]:", err);
+    return NextResponse.json(
+      { error: err?.message || "Internal server error" },
+      { status: 500 }
+    );
   }
-
-  await prisma.conversation.delete({ where: { id } });
-
-  return NextResponse.json({ success: true });
 }
+

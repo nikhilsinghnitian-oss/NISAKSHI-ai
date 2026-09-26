@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import Sidebar from "../components/Sidebar";
 import ChatArea from "../components/ChatArea";
 
@@ -53,6 +54,7 @@ function detectImageIntent(text: string): boolean {
 
 export default function ChatPage() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const [conversations, setConversations] = useState<DbConversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeMessages, setActiveMessages] = useState<DbMessage[]>([]);
@@ -68,18 +70,27 @@ export default function ChatPage() {
   }, []);
 
   const loadConversations = useCallback(async () => {
-    const res = await fetch("/api/conversations");
-    if (!res.ok) return;
-    const data = await res.json();
-    setConversations(data.conversations || []);
-    setReady(true);
+    try {
+      const res = await fetch("/api/conversations");
+      if (res.ok) {
+        const data = await res.json();
+        setConversations(data.conversations || []);
+      }
+    } catch (err) {
+      console.error("Failed to load conversations:", err);
+    } finally {
+      setReady(true);
+    }
   }, []);
 
   useEffect(() => {
     if (status === "authenticated") {
       loadConversations();
+    } else if (status === "unauthenticated") {
+      setReady(true);
+      router.push("/");
     }
-  }, [status, loadConversations]);
+  }, [status, loadConversations, router]);
 
   const loadMessages = useCallback(async (id: string) => {
     const res = await fetch(`/api/conversations/${id}`);
