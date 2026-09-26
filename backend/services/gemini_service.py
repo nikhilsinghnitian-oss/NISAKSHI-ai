@@ -47,7 +47,7 @@ TEXT_KEYWORDS = [
 
 IMAGE_REGEX = re.compile(
     r"(^(draw|paint|sketch|illustrate)\b)|"
-    r"(\b(generate|create|make|draw|paint|sketch|illustrate)\s+(an?\s+)?(image|picture|poster|logo|drawing|photo|portrait|illustration|wallpaper|artwork)\b)|"
+    r"(\b(generate|create|make|draw|paint|sketch|illustrate)\s+(an?\s+)?(\w+\s+)*(image|picture|poster|logo|drawing|photo|portrait|illustration|wallpaper|artwork|diagram)\b)|"
     r"(\b(generate|create|draw|paint|render)\s+(a|an)\s+.*?\b(castle|city|car|landscape|sunset|mountain|portrait|tiger|lion|cat|dog|robot|tree|forest|space|planet|star|galaxy|room|building|scene|scenery|character|avatar|creature|dragon)\b)",
     re.IGNORECASE
 )
@@ -63,8 +63,8 @@ def is_image_request(message: str) -> bool:
 
 
 def _is_rate_limit(err: str) -> bool:
-    """Check if error string indicates a rate limit / quota exhaustion."""
-    return "429" in err or "RESOURCE_EXHAUSTED" in err
+    """Check if error string indicates a rate limit, quota exhaustion, or temporary overload."""
+    return "429" in err or "RESOURCE_EXHAUSTED" in err or "503" in err or "UNAVAILABLE" in err
 
 
 def _classify_error(err: str) -> str:

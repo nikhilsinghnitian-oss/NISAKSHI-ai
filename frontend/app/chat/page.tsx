@@ -41,7 +41,7 @@ const TEXT_NEGATIVE_KEYWORDS = [
 ];
 
 const IMAGE_INTENT_REGEX =
-  /(^(draw|paint|sketch|illustrate)\b)|(\b(generate|create|make|draw|paint|sketch|illustrate)\s+(an?\s+)?(image|picture|poster|logo|drawing|photo|portrait|illustration|wallpaper|artwork)\b)|(\b(generate|create|draw|paint|render)\s+(a|an)\s+.*?\b(castle|city|car|landscape|sunset|mountain|portrait|tiger|lion|cat|dog|robot|tree|forest|space|planet|star|galaxy|room|building|scene|scenery|character|avatar|creature|dragon)\b)/i;
+  /(^(draw|paint|sketch|illustrate)\b)|(\b(generate|create|make|draw|paint|sketch|illustrate)\s+(an?\s+)?(\w+\s+)*(image|picture|poster|logo|drawing|photo|portrait|illustration|wallpaper|artwork|diagram)\b)|(\b(generate|create|draw|paint|render)\s+(a|an)\s+.*?\b(castle|city|car|landscape|sunset|mountain|portrait|tiger|lion|cat|dog|robot|tree|forest|space|planet|star|galaxy|room|building|scene|scenery|character|avatar|creature|dragon)\b)/i;
 
 function detectImageIntent(text: string): boolean {
   const lower = text.toLowerCase();
