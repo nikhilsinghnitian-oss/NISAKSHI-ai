@@ -37,9 +37,14 @@ export async function GET() {
 
     return NextResponse.json({ conversations, userId: user.id });
   } catch (err: any) {
-    console.error("Error in GET /api/conversations:", err);
+    console.error("Error in GET /api/conversations:", {
+      name: err?.name,
+      code: err?.code,
+      message: err?.message,
+      meta: err?.meta,
+    });
     return NextResponse.json(
-      { error: err?.message || "Internal server error" },
+      { error: err?.message || "Internal server error", code: err?.code },
       { status: 500 }
     );
   }
@@ -72,11 +77,17 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ conversation });
   } catch (err: any) {
-    console.error("Error in POST /api/conversations:", err);
+    console.error("Error in POST /api/conversations:", {
+      name: err?.name,
+      code: err?.code,
+      message: err?.message,
+      meta: err?.meta,
+    });
     return NextResponse.json(
-      { error: err?.message || "Internal server error" },
+      { error: err?.message || "Internal server error", code: err?.code },
       { status: 500 }
     );
   }
 }
+
 
