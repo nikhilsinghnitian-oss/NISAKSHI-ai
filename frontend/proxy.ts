@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 
-export default auth((req) => {
+export const proxy = auth((req) => {
   const { pathname } = req.nextUrl;
   const isLoggedIn = !!req.auth;
 
@@ -25,4 +25,3 @@ export default auth((req) => {
 export const config = {
   matcher: ["/", "/chat/:path*"],
 };
-
