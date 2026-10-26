@@ -60,3 +60,28 @@ jobs:
       - name: Build frontend
         run: npm run build
         working-directory: frontend
+
+  infrastructure:
+    name: Infrastructure validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - name: Format Terraform
+        run: terraform fmt -check -recursive cloud/terraform
+      - name: Initialize Terraform without remote state
+        run: terraform init -backend=false
+        working-directory: cloud/terraform
+      - name: Validate Terraform
+        run: terraform validate
+        working-directory: cloud/terraform
+
+  backend-container:
+    name: Backend container build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build --tag nisakshi-backend-ci ./backend
