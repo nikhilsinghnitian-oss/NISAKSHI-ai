@@ -2,7 +2,6 @@ import { auth } from "@/auth";
 import { createToken } from "@/app/lib/auth-token";
 import { readJsonObject } from "@/app/lib/request-validation";
 import { NextResponse } from "next/server";
-import { prisma } from "@/app/lib/db";
 import { getOrCreateActiveUser, accountDeletedResponse } from "@/app/lib/account-guard";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://127.0.0.1:8000";
