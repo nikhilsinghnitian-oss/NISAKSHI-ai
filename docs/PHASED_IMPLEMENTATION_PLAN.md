@@ -56,7 +56,7 @@ Build NISAKSHI as a private, multi-user AI workspace with a self-hosted inferenc
 - **Still required:** a real private bucket integration test, production schema rollout, and cross-user tests against a live database/bucket.
 
 ### Phase 5 — Private chat, history, and data controls
-**Status: export and delete-all saved-content endpoints/UI implemented on `codex/phase-5-data-controls`; CI and live verification pending**
+**Status: export/delete-all endpoints and privacy UI implemented; GitHub Actions run #114 passed; live database/bucket verification pending**
 - PostgreSQL remains the conversation-history source of truth; conversation and message APIs scope reads/writes to the current user's owned conversations.
 - Add a private JSON export for account profile, conversations/messages, and file metadata; uploaded file bytes are downloaded separately.
 - Add a confirmation-gated delete-all flow that removes file objects first and deletes conversation/message and file metadata records transactionally. It keeps the sign-in identity and does not claim to purge provider backups.
