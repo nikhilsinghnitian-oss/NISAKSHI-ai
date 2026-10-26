@@ -10,7 +10,8 @@ type RouteContext = { params: Promise<{ fileId: string }> };
 
 function sameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
-  if (!origin) return true;
+  // State-changing file routes are browser-only: require an explicit same-origin header.
+  if (!origin) return false;
   try {
     return new URL(origin).origin === new URL(request.url).origin;
   } catch {
