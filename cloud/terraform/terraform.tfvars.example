@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars (do not commit credentials or local secrets).
+project_id   = "YOUR_GCP_PROJECT_ID"
+region       = "asia-south1"
+app_name     = "nisakshi"
+bucket_suffix = "replace-with-unique"
+
+# First apply: keep backend deployment disabled to create the safe foundation.
+deploy_backend = false
+
+# Later, after model server + AUTH_SECRET secret version + container image exist:
+# deploy_backend       = true
+# backend_image        = "asia-south1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/nisakshi-containers/backend:sha"
+# model_server_base_url = "http://MODEL_SERVER_PRIVATE_IP:8080/v1"
+# nisakshi_model_id     = "nisakshi-local"
+# frontend_origins      = "https://your-real-frontend.example"
+# allow_public_invocation = false
