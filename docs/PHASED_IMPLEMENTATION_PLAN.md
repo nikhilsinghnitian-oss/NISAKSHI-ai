@@ -48,12 +48,12 @@ Build NISAKSHI as a private, multi-user AI workspace with a self-hosted inferenc
 - **Still required:** GCP project/billing approval, a careful plan review, secret versions, database/model runtime provisioning, and live deployment verification.
 
 ### Phase 4 — Secure file workspace
-**Status: implementation added on `codex/phase-4-secure-file-workspace`; pending CI and live bucket verification**
+**Status: file APIs and private file-library page implemented; CI passed on earlier revision; live bucket verification pending**
 - Authenticated upload/list/download/delete endpoints.
 - PostgreSQL `FileAsset` metadata and lifecycle status.
 - Private GCS objects are scoped to the verified user ID and UUID; no public or signed bucket URL is returned to the browser.
 - Validate supported extension, MIME declaration, signatures/container layout, UTF-8 text, file size, and safe display filename.
-- **Still required:** CI, a real private bucket integration test, production schema rollout, cross-user API tests, and a user-facing file manager screen.
+- **Still required:** re-run CI after the latest changes, a real private bucket integration test, production schema rollout, and cross-user API tests against the HTTP endpoints.
 
 ### Phase 5 — Private chat, history, and data controls
 - Make PostgreSQL-backed conversation history the source of truth; remove full-message localStorage persistence where feasible.
