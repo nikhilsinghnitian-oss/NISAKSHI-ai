@@ -16,6 +16,11 @@ enum FileAssetStatus {
   FAILED
 }
 
+enum AccountDeletionStatus {
+  PENDING
+  COMPLETE
+}
+
 model User {
   id            String         @id @default(cuid())
   email         String         @unique
@@ -70,4 +75,16 @@ model FileAsset {
 
   @@index([userId, createdAt])
   @@index([userId, status])
+}
+
+
+model DeletedAccount {
+  id        String                @id @default(cuid())
+  emailHash String                @unique @db.VarChar(64)
+  status    AccountDeletionStatus @default(PENDING)
+  expiresAt DateTime?
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  @@index([status, expiresAt])
 }
