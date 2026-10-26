@@ -1,6 +1,9 @@
 import { auth } from "@/auth";
+import { readJsonObject } from "@/app/lib/request-validation";
 import { prisma } from "@/app/lib/db";
 import { NextResponse } from "next/server";
+
+const privateHeaders = { "Cache-Control": "no-store, private" };
 
 async function getUserAndConversation(
   email: string | null | undefined,
@@ -12,6 +15,7 @@ async function getUserAndConversation(
     where: { email },
     update: {},
     create: { email, name: email.split("@")[0] },
+    select: { id: true },
   });
 
   const conversation = await prisma.conversation.findUnique({
@@ -25,6 +29,11 @@ async function getUserAndConversation(
   return { user, conversation };
 }
 
+function logSafeError(route: string, err: unknown) {
+  const error = err as { name?: string; code?: string };
+  console.error(route, { name: error?.name, code: error?.code });
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -33,17 +42,21 @@ export async function GET(
     const { id } = await params;
     const session = await auth();
     const result = await getUserAndConversation(session?.user?.email, id);
-
     if ("error" in result) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status, headers: privateHeaders }
+      );
     }
-
-    return NextResponse.json({ conversation: result.conversation });
-  } catch (err: any) {
-    console.error("Error in GET /api/conversations/[id]:", err);
     return NextResponse.json(
-      { error: err?.message || "Internal server error" },
-      { status: 500 }
+      { conversation: result.conversation },
+      { headers: privateHeaders }
+    );
+  } catch (err: unknown) {
+    logSafeError("Error in GET /api/conversations/[id]", err);
+    return NextResponse.json(
+      { error: "Unable to load conversation" },
+      { status: 500, headers: privateHeaders }
     );
   }
 }
@@ -56,26 +69,39 @@ export async function PATCH(
     const { id } = await params;
     const session = await auth();
     const result = await getUserAndConversation(session?.user?.email, id);
-
     if ("error" in result) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status, headers: privateHeaders }
+      );
     }
 
-    const body = await req.json().catch(() => ({}));
-    const title = String(body.title || "").trim();
+    const parsed = await readJsonObject(req, 8 * 1024);
+    if (!parsed.ok) return parsed.response;
+
+    const rawTitle = parsed.value.title;
+    if (typeof rawTitle !== "string") {
+      return NextResponse.json({ error: "Title must be text" }, { status: 400 });
+    }
+    const title = rawTitle.trim();
     if (!title) return NextResponse.json({ error: "Title required" }, { status: 400 });
+    if (title.length > 120) {
+      return NextResponse.json({ error: "Title must be at most 120 characters" }, { status: 400 });
+    }
 
     const updated = await prisma.conversation.update({
       where: { id },
       data: { title, updatedAt: new Date() },
     });
-
-    return NextResponse.json({ conversation: updated });
-  } catch (err: any) {
-    console.error("Error in PATCH /api/conversations/[id]:", err);
     return NextResponse.json(
-      { error: err?.message || "Internal server error" },
-      { status: 500 }
+      { conversation: updated },
+      { headers: privateHeaders }
+    );
+  } catch (err: unknown) {
+    logSafeError("Error in PATCH /api/conversations/[id]", err);
+    return NextResponse.json(
+      { error: "Unable to update conversation" },
+      { status: 500, headers: privateHeaders }
     );
   }
 }
@@ -88,20 +114,20 @@ export async function DELETE(
     const { id } = await params;
     const session = await auth();
     const result = await getUserAndConversation(session?.user?.email, id);
-
     if ("error" in result) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status, headers: privateHeaders }
+      );
     }
 
     await prisma.conversation.delete({ where: { id } });
-
-    return NextResponse.json({ success: true });
-  } catch (err: any) {
-    console.error("Error in DELETE /api/conversations/[id]:", err);
+    return NextResponse.json({ success: true }, { headers: privateHeaders });
+  } catch (err: unknown) {
+    logSafeError("Error in DELETE /api/conversations/[id]", err);
     return NextResponse.json(
-      { error: err?.message || "Internal server error" },
-      { status: 500 }
+      { error: "Unable to delete conversation" },
+      { status: 500, headers: privateHeaders }
     );
   }
 }
-

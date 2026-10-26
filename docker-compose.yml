@@ -1,0 +1,51 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8000"
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET in the root .env file}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      MODEL_SERVER_BASE_URL: http://model-server:8080/v1
+      NISAKSHI_MODEL_ID: ${NISAKSHI_MODEL_ID:-nisakshi-local}
+      NISAKSHI_ALLOWED_MODELS: ${NISAKSHI_ALLOWED_MODELS:-nisakshi-local}
+      MODEL_SERVER_API_KEY: ${MODEL_SERVER_API_KEY:-}
+      IMAGE_SERVER_BASE_URL: ${IMAGE_SERVER_BASE_URL:-}
+      IMAGE_MODEL_ID: ${IMAGE_MODEL_ID:-}
+      IMAGE_ALLOWED_MODELS: ${IMAGE_ALLOWED_MODELS:-}
+      IMAGE_SERVER_API_KEY: ${IMAGE_SERVER_API_KEY:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - model-server
+    restart: unless-stopped
+    networks:
+      - nisakshi-private
+
+  model-server:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    command:
+      - "-m"
+      - "/models/${MODEL_FILE:-model.gguf}"
+      - "--alias"
+      - "${NISAKSHI_MODEL_ID:-nisakshi-local}"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+      - "-c"
+      - "${MODEL_CONTEXT_SIZE:-4096}"
+      - "-ngl"
+      - "${MODEL_GPU_LAYERS:-0}"
+    volumes:
+      - ./models:/models:ro
+    expose:
+      - "8080"
+    restart: unless-stopped
+    networks:
+      - nisakshi-private
+
+networks:
+  nisakshi-private:
+    driver: bridge
