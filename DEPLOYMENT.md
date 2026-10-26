@@ -99,5 +99,5 @@ The user-facing page is available at `/files` and is linked from the chat sideba
 
 - Do not rely on CORS as authentication; inference and file endpoints verify the short-lived signed service token.
 - Do not pass credentials in shell history or source control.
-- Uploaded files are stored only; this phase does not parse or execute them. Document parsing, malware scanning, async ingestion jobs, per-user retrieval, retention/export, shared-gateway rate limits, and a file manager UI remain future phases.
+- Uploaded files are stored only; this phase does not parse or execute them. Document parsing, malware scanning, async ingestion jobs, per-user retrieval, retention/export, and shared-gateway rate limits remain future phases.
 - Check model and dataset licenses before download or deployment. Model weights are not included in this repository.
