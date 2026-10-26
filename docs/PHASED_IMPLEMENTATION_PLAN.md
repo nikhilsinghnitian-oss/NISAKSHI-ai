@@ -1,7 +1,7 @@
 # NISAKSHI AI — Phased Implementation Plan
 
 **Status date:** 2026-10-26
-**Working branch:** `codex/phase-4-secure-file-workspace`
+**Working branch:** `codex/phase-5-data-controls`
 **Production branch:** `main` (kept unchanged during this work)
 
 ## Product goal
@@ -48,19 +48,20 @@ Build NISAKSHI as a private, multi-user AI workspace with a self-hosted inferenc
 - **Still required:** GCP project/billing approval, a careful plan review, secret versions, database/model runtime provisioning, and live deployment verification.
 
 ### Phase 4 — Secure file workspace
-**Status: file APIs and private file-library page implemented; CI passed on earlier revision; live bucket verification pending**
+**Status: implementation and GitHub Actions run #101 passed; live bucket verification pending**
 - Authenticated upload/list/download/delete endpoints.
 - PostgreSQL `FileAsset` metadata and lifecycle status.
 - Private GCS objects are scoped to the verified user ID and UUID; no public or signed bucket URL is returned to the browser.
 - Validate supported extension, MIME declaration, signatures/container layout, UTF-8 text, file size, and safe display filename.
-- **Still required:** re-run CI after the latest changes, a real private bucket integration test, production schema rollout, and cross-user API tests against the HTTP endpoints.
+- **Still required:** a real private bucket integration test, production schema rollout, and cross-user tests against a live database/bucket.
 
 ### Phase 5 — Private chat, history, and data controls
-- Make PostgreSQL-backed conversation history the source of truth; remove full-message localStorage persistence where feasible.
-- Verify conversation ownership for every read/write/update/delete path.
-- Add account data export and delete-all/account deletion flows, with object and index cleanup.
-- Define retention, backup deletion windows, encryption at rest/in transit, and application-level encryption only where key management is designed and recoverable.
-- **Exit criteria:** cross-user isolation and deletion tests pass; privacy policy accurately reflects actual data flows.
+**Status: export and delete-all saved-content endpoints/UI implemented on `codex/phase-5-data-controls`; CI and live verification pending**
+- PostgreSQL remains the conversation-history source of truth; conversation and message APIs scope reads/writes to the current user's owned conversations.
+- Add a private JSON export for account profile, conversations/messages, and file metadata; uploaded file bytes are downloaded separately.
+- Add a confirmation-gated delete-all flow that removes file objects first and deletes conversation/message and file metadata records transactionally. It keeps the sign-in identity and does not claim to purge provider backups.
+- Expose both controls in a dedicated privacy page linked from the chat sidebar.
+- **Still required:** CI on this branch, automated cross-user tests for the Next.js routes, privacy-policy review, and explicit backup-retention/restore verification.
 
 ### Phase 6 — Retrieval-augmented generation (RAG)
 - Build parsing, chunking, metadata filtering, and per-user vector retrieval.
