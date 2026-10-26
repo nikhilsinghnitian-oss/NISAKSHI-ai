@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { createToken } from "@/app/lib/auth-token";
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/db";
+import { getOrCreateActiveUser, accountDeletedResponse } from "@/app/lib/account-guard";
 
 // GET /api/auth-token — short-lived service token for authenticated integration clients.
 export async function GET() {
@@ -14,19 +15,8 @@ export async function GET() {
       );
     }
 
-    const user = await prisma.user.upsert({
-      where: { email: session.user.email },
-      update: {
-        name: session.user.name ?? undefined,
-        image: session.user.image ?? undefined,
-      },
-      create: {
-        email: session.user.email,
-        name: session.user.name,
-        image: session.user.image,
-      },
-      select: { id: true },
-    });
+    const user = await getOrCreateActiveUser(session.user.email, { name: session.user.name, image: session.user.image });
+    if (!user) return accountDeletedResponse();
 
     const token = await createToken(user.id);
     return NextResponse.json(
