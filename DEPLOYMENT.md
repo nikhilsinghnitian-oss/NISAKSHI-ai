@@ -71,7 +71,7 @@ npx prisma db push
 npm run dev
 ```
 
-After adding `FileAsset` to the Prisma schema, apply the schema to an isolated development database with `npx prisma db push`. For production, create and review a controlled migration/rollout rather than applying schema changes blindly.
+After adding `FileAsset` to the Prisma schema, apply the schema to an isolated development database with `npx prisma db push`. For an existing database created from the prior schema, `frontend/prisma/phase4_file_asset.sql` is the additive SQL for a one-time, reviewed rollout. Back up the database first, test the SQL in staging, and apply it only if neither `FileAssetStatus` nor `FileAsset` already exists (for example: `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f prisma/phase4_file_asset.sql` from `frontend/`). This repository had no prior Prisma migration history, so do not blindly run `prisma migrate deploy`; baseline the existing schema as a separate, reviewed operation before adopting a migration history.
 
 ## File workspace (Phase 4)
 
