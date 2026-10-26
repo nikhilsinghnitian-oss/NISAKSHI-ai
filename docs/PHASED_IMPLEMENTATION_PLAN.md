@@ -1,7 +1,7 @@
 # NISAKSHI AI — Phased Implementation Plan
 
-**Status date:** 2026-10-26  
-**Working branch:** `codex/phase-0-baseline-and-security`  
+**Status date:** 2026-10-26
+**Working branch:** `codex/phase-4-secure-file-workspace`
 **Production branch:** `main` (kept unchanged during this work)
 
 ## Product goal
@@ -21,42 +21,39 @@ Build NISAKSHI as a private, multi-user AI workspace with a self-hosted inferenc
 ## Phases and acceptance criteria
 
 ### Phase 0 — Baseline, scope, and rollback point
-**Status: in progress / documentation underway**
+**Status: source review and baseline documentation recorded; not a complete security audit**
 - Confirm the target repository and default branch.
-- Inspect the current frontend/backend, authentication, persistence, deployment instructions, and secret-handling conventions.
-- Record confirmed gaps separately from items that still require runtime testing.
+- Inspect frontend/backend, authentication, persistence, deployment instructions, and secret-handling conventions.
+- Keep confirmed gaps separate from items requiring runtime testing.
 - Work on a branch; leave `main` untouched.
 - **Exit criteria:** audit note and ordered implementation plan committed; no claim of a successful build until CI/local execution confirms it.
 
 ### Phase 1 — Security and API hardening
+**Status: code implemented; CI checks passed on earlier branch head**
 - Restrict backend CORS to configured frontend origins.
 - Make short-lived frontend-to-backend HMAC tokens fail closed, validate issuer/audience/time claims, and use timing-safe signature comparison.
-- Bound chat/image payloads and validate message roles and content types.
-- Add repeatable auth/input tests and a CI workflow.
-- Audit all API routes for session checks and per-user ownership; add rate limits at the appropriate shared gateway before public launch.
-- **Exit criteria:** security tests pass; route-by-route ownership audit completed; no public launch until rate limits and production auth configuration are verified.
+- Bound chat/image payloads and validate request models.
+- Add repeatable auth/input tests and CI.
+- **Still required:** full route-by-route review, integration tests, rate limits at a shared gateway, and production auth verification.
 
 ### Phase 2 — Self-hosted model runtime
-- Replace the current Gemini-specific inference dependency with a provider-neutral client for a privately hosted OpenAI-compatible inference endpoint (for example, a self-hosted llama.cpp/vLLM-compatible server).
-- Keep model ID, endpoint, timeout, context limits, and concurrency configuration server-side.
-- Add an explicit model health check and clear unavailable/timeout handling.
-- Keep inference endpoint private; prohibit arbitrary user-supplied upstream URLs.
-- **Exit criteria:** text streaming works against a locally/self-hosted model with external inference credentials unset; automated tests use a mock HTTP endpoint.
+**Status: provider-neutral client implemented; automated checks passed, real model not exercised**
+- Call a self-hosted OpenAI-compatible inference endpoint without hosted inference credentials.
+- Keep model IDs and endpoint configuration server-side and allowlisted.
+- **Still required:** live self-hosted model download, license review, and runtime/latency tests.
 
 ### Phase 3 — Cloud foundation
-- Confirm billing, region, data residency, and acceptable monthly spend before creating resources.
-- Containerize the API; build and deploy using a controlled pipeline and Artifact Registry.
-- Use private Cloud Storage buckets for user files, a managed PostgreSQL database for structured data, and Secret Manager for secrets.
-- Give each runtime a least-privilege service account. Use private connectivity for database/model traffic where supported.
-- Evaluate CPU-only quantized inference versus GPU-backed model compute. A 4 GB local GPU is a development constraint; it does not define the cloud model server.
-- **Exit criteria:** health checks pass in the selected cloud; public access is deliberate and protected; backup/restore and deletion procedures are documented.
+**Status: Terraform and container configuration validated in CI; no cloud resources created**
+- Terraform describes a private GCS bucket, least-privilege backend service account, VPC/subnet/firewall, Artifact Registry, Secret Manager resources, and optional Cloud Run backend.
+- **Still required:** GCP project/billing approval, a careful plan review, secret versions, database/model runtime provisioning, and live deployment verification.
 
 ### Phase 4 — Secure file workspace
-- Support PDF, scanned PDF/image, PPTX, DOCX, TXT/Markdown, CSV/spreadsheets, and audio ingestion in bounded jobs.
-- Validate size, MIME type, file signature where possible, ownership, and processing status.
-- Upload/download with short-lived signed URLs or authenticated proxy routes; never publish bucket objects.
-- Store file metadata and lifecycle status in PostgreSQL; objects belong to a user.
-- **Exit criteria:** supported formats tested with normal, corrupt, oversized, and unauthorized files.
+**Status: implementation added on `codex/phase-4-secure-file-workspace`; pending CI and live bucket verification**
+- Authenticated upload/list/download/delete endpoints.
+- PostgreSQL `FileAsset` metadata and lifecycle status.
+- Private GCS objects are scoped to the verified user ID and UUID; no public or signed bucket URL is returned to the browser.
+- Validate supported extension, MIME declaration, signatures/container layout, UTF-8 text, file size, and safe display filename.
+- **Still required:** CI, a real private bucket integration test, production schema rollout, cross-user API tests, and a user-facing file manager screen.
 
 ### Phase 5 — Private chat, history, and data controls
 - Make PostgreSQL-backed conversation history the source of truth; remove full-message localStorage persistence where feasible.
@@ -93,4 +90,4 @@ Build NISAKSHI as a private, multi-user AI workspace with a self-hosted inferenc
 
 ## Current confirmed baseline
 
-See [PHASE_0_BASELINE.md](./PHASE_0_BASELINE.md). Phases 2–9 are not complete merely because they are described here. Cloud resource creation/deployment requires the target project, region, billing decisions, and credentials to be available and verified.
+See [PHASE_0_BASELINE.md](./PHASE_0_BASELINE.md). The status written here distinguishes code/config checks from live tests. Cloud resource creation/deployment requires the target project, region, billing decisions, and credentials to be available and verified.
