@@ -7,20 +7,17 @@ from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
-from google import genai
 from security import RequestBodyLimitMiddleware, get_user_id
-from services.gemini_service import stream_text, generate_image
+from services.self_hosted_service import (
+    check_text_model_server,
+    generate_image,
+    stream_text,
+)
 
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
-    raise RuntimeError("GEMINI_API_KEY is missing in .env")
-
-client = genai.Client(api_key=api_key)
 
 app = FastAPI(title="NISAKSHI AI API")
 
@@ -71,6 +68,15 @@ def health():
     return {"status": "healthy"}
 
 
+@app.get("/ready")
+def ready():
+    ready_state, reason = check_text_model_server()
+    if not ready_state:
+        # Deliberately return only a generic state, not URLs or provider details.
+        raise HTTPException(status_code=503, detail={"status": "not_ready", "reason": reason})
+    return {"status": "ready"}
+
+
 @app.post("/chat")
 def chat(request: ChatRequest, authorization: str = Header(default="")):
     get_user_id(authorization)
@@ -78,7 +84,7 @@ def chat(request: ChatRequest, authorization: str = Header(default="")):
         raise HTTPException(status_code=422, detail="Message must not be blank")
 
     def model_stream():
-        for update in stream_text(client, request.message, model=request.model):
+        for update in stream_text(None, request.message, model=request.model):
             yield f"data: {json.dumps(update)}\n\n"
         yield "data: [DONE]\n\n"
 
@@ -98,7 +104,7 @@ def gen_image(request: ImageRequest, authorization: str = Header(default="")):
     if not request.prompt.strip():
         raise HTTPException(status_code=422, detail="Prompt must not be blank")
 
-    result = generate_image(client, request.prompt, model=request.model)
+    result = generate_image(None, request.prompt, model=request.model)
     if not result.get("success"):
         return {
             "success": False,
