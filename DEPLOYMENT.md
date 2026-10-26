@@ -101,3 +101,13 @@ The user-facing page is available at `/files` and is linked from the chat sideba
 - Do not pass credentials in shell history or source control.
 - Uploaded files are stored only; this phase does not parse or execute them. Document parsing, malware scanning, async ingestion jobs, per-user retrieval, retention/export, and shared-gateway rate limits remain future phases.
 - Check model and dataset licenses before download or deployment. Model weights are not included in this repository.
+
+
+## Phase 5 — account export and deletion
+
+- `GET /api/account/export` downloads a JSON export containing the signed-in user's profile, conversations, messages, and private-file metadata. File bytes are deliberately excluded; download originals individually before account deletion.
+- `DELETE /api/account` requires a signed-in session and an explicit same-origin request. It writes a pending account-deletion tombstone, calls the authenticated backend `DELETE /users/me/files` endpoint to remove every object under that user's private GCS prefix (including orphaned objects), then deletes the database user and cascading chat/file metadata in a database transaction.
+- If private storage is not configured or cleanup cannot be confirmed, deletion fails closed: the account remains locked by a pending tombstone and the user can retry after backend storage is restored. Do not remove a pending tombstone manually until cleanup has been completed or the remaining objects have been accounted for.
+- Apply `frontend/prisma/phase5_account_controls.sql` only once to an existing database after a backup and staging test, or run `npx prisma db push` against a development/staging database after reviewing the schema. Do not run the SQL if `AccountDeletionStatus` or `DeletedAccount` already exists.
+- Tombstones contain a keyed HMAC digest of normalized email, not the email itself. Keep `AUTH_SECRET` stable for at least 30 days after deletion so the stale-session guard remains effective. This does not instantly purge backups; set and disclose database/object backup retention separately.
+- Account deletion is not considered verified until the backend has `GCS_BUCKET_NAME` configured, HTTP cleanup succeeds, and database/storage behavior has been tested together. Never test destructive deletion against production data.
