@@ -84,7 +84,7 @@ The authenticated server-side endpoints are:
 
 Supported formats currently include PDF, PNG/JPEG/WebP, DOCX, PPTX, XLSX, UTF-8 TXT/Markdown/CSV, MP3, WAV, and M4A. Legacy Office formats such as DOC/XLS/PPT are not accepted. The backend enforces a 20 MiB file limit, signature/content checks, bounded Office ZIP metadata, safe filenames, and owner-derived object keys. The Next.js proxy has a conservative 4 MiB file limit to stay below common serverless request-body limits; raising this requires a larger gateway or a designed, short-lived signed-upload flow. The backend does not publish public objects or return bucket URLs.
 
-The frontend database needs the `FileAsset` schema change before these API routes can work. The bucket must exist, and the backend service account must have object permissions. Upload, download, and delete have not yet been verified against a live bucket, and the user-facing file manager UI and document parsing/RAG are still future work.
+The user-facing page is available at `/files` and is linked from the chat sidebar. The frontend database needs the `FileAsset` schema change before the APIs can work. The bucket must exist, and the backend service account must have object permissions. Upload, download, and delete have not yet been verified against a live bucket; document parsing/RAG and malware scanning remain future work.
 
 ## Cloud deployment notes
 
