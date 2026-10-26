@@ -3,15 +3,17 @@ import { createToken } from "@/app/lib/auth-token";
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/db";
 
-// GET /api/auth-token — return a short-lived HMAC token for FastAPI
+// GET /api/auth-token — short-lived service token for authenticated integration clients.
 export async function GET() {
   try {
     const session = await auth();
     if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401, headers: { "Cache-Control": "no-store, private" } }
+      );
     }
 
-    // Upsert to ensure user exists (first login creates the record)
     const user = await prisma.user.upsert({
       where: { email: session.user.email },
       update: {
@@ -27,13 +29,19 @@ export async function GET() {
     });
 
     const token = await createToken(user.id);
-    return NextResponse.json(\n      { token },\n      { headers: { "Cache-Control": "no-store, private" } }\n    );
-  } catch (err: any) {
-    console.error("Error in /api/auth-token:", err);
     return NextResponse.json(
-      { error: err?.message || "Internal server error" },
-      { status: 500 }
+      { token },
+      { headers: { "Cache-Control": "no-store, private" } }
+    );
+  } catch (err: unknown) {
+    const error = err as { name?: string; code?: string };
+    console.error("Error in /api/auth-token:", {
+      name: error?.name,
+      code: error?.code,
+    });
+    return NextResponse.json(
+      { error: "Unable to create service token" },
+      { status: 500, headers: { "Cache-Control": "no-store, private" } }
     );
   }
 }
-
