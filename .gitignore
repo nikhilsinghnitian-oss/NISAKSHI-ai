@@ -9,3 +9,15 @@ node_modules/
 *.db
 cloudflared.exe
 .neon
+
+# Model weights are large and license-governed; never commit them.
+models/
+*.gguf
+
+# Terraform local state, downloaded providers, plans, and private variable files.
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+*.auto.tfvars
