@@ -10,6 +10,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum FileAssetStatus {
+  UPLOADING
+  READY
+  FAILED
+}
+
 model User {
   id            String         @id @default(cuid())
   email         String         @unique
@@ -19,6 +25,7 @@ model User {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   conversations Conversation[]
+  files         FileAsset[]
 }
 
 model Conversation {
@@ -46,4 +53,21 @@ model Message {
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId])
+}
+
+model FileAsset {
+  id           String          @id @default(cuid())
+  userId       String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  storageKey   String          @unique
+  sha256       String?         @db.VarChar(64)
+  status       FileAssetStatus @default(UPLOADING)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, status])
 }
