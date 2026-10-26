@@ -13,7 +13,7 @@ export async function readJsonObject(
   maxBytes: number
 ): Promise<ParsedJsonObject> {
   const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
-  if (!contentType.includes("application/json")) {
+  if (contentType.split(";")[0].trim() !== "application/json") {
     return {
       ok: false,
       response: NextResponse.json(
