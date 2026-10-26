@@ -245,13 +245,15 @@ def upload_object(
 
 
 def download_object(user_id: str, file_id: str) -> tuple[bytes, str, str]:
-    key = object_key(user_id, file_id)
+    owner_id = validate_user_id(user_id)
+    asset_id = validate_file_id(file_id)
+    key = object_key(owner_id, asset_id)
     try:
         blob = _get_bucket().get_blob(key)
         if blob is None:
             raise StoredObjectNotFound("Object not found")
         metadata = blob.metadata or {}
-        if metadata.get("owner_id") != user_id or metadata.get("file_id") != file_id:
+        if metadata.get("owner_id") != owner_id or metadata.get("file_id") != asset_id:
             raise StoredObjectNotFound("Object not found")
         data = blob.download_as_bytes()
         mime_type = blob.content_type or "application/octet-stream"
@@ -270,7 +272,9 @@ def download_object(user_id: str, file_id: str) -> tuple[bytes, str, str]:
 
 
 def delete_object(user_id: str, file_id: str) -> None:
-    key = object_key(user_id, file_id)
+    owner_id = validate_user_id(user_id)
+    asset_id = validate_file_id(file_id)
+    key = object_key(owner_id, asset_id)
     try:
         blob = _get_bucket().get_blob(key)
         if blob is None:
