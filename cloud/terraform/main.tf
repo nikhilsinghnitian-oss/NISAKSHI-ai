@@ -233,6 +233,11 @@ resource "google_cloud_run_v2_service" "backend" {
         value = var.nisakshi_allowed_models
       }
 
+      env {
+        name  = "GCS_BUCKET_NAME"
+        value = google_storage_bucket.private_user_files.name
+      }
+
       dynamic "env" {
         for_each = var.use_model_api_key ? [1] : []
         content {
