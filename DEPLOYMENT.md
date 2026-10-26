@@ -86,6 +86,14 @@ Supported formats currently include PDF, PNG/JPEG/WebP, DOCX, PPTX, XLSX, UTF-8 
 
 The user-facing page is available at `/files` and is linked from the chat sidebar. The frontend database needs the `FileAsset` schema change before the APIs can work. The bucket must exist, and the backend service account must have object permissions. Upload, download, and delete have not yet been verified against a live bucket; document parsing/RAG and malware scanning remain future work.
 
+## Privacy and data controls (Phase 5)
+
+- `GET /api/data-export` downloads a private JSON export containing the account profile, saved conversations/messages, and file metadata. Uploaded file bytes are not embedded in the JSON; use the authenticated download route or the `/files` page for each file.
+- `POST /api/data-controls` requires a signed-in session, an explicit same-origin request, action `delete_all`, and the exact confirmation `DELETE ALL MY NISAKSHI DATA`.
+- The deletion endpoint removes private GCS objects first and then deletes conversations/messages and file metadata in a database transaction. If object storage fails part-way through, the database records remain so the user can retry; object deletion is idempotent.
+- This is a **delete-all saved content** action, not account closure: the Google sign-in identity remains. It does not purge provider backups; backup expiry must follow the configured retention policy.
+- These application routes are code-only until the Phase 4 schema is applied and the private bucket/service-account permissions are configured.
+
 ## Cloud deployment notes
 
 - Terraform in `cloud/terraform` describes a private bucket with public-access prevention and uniform bucket-level access.
@@ -99,5 +107,5 @@ The user-facing page is available at `/files` and is linked from the chat sideba
 
 - Do not rely on CORS as authentication; inference and file endpoints verify the short-lived signed service token.
 - Do not pass credentials in shell history or source control.
-- Uploaded files are stored only; this phase does not parse or execute them. Document parsing, malware scanning, async ingestion jobs, per-user retrieval, retention/export, and shared-gateway rate limits remain future phases.
+- Uploaded files are stored only; this phase does not parse or execute them. Document parsing, malware scanning, async ingestion jobs, per-user retrieval, backup-expiry verification, and shared-gateway rate limits remain future phases.
 - Check model and dataset licenses before download or deployment. Model weights are not included in this repository.
