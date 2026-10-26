@@ -27,7 +27,7 @@ export async function GET() {
     });
 
     const token = await createToken(user.id);
-    return NextResponse.json({ token });
+    return NextResponse.json(\n      { token },\n      { headers: { "Cache-Control": "no-store, private" } }\n    );
   } catch (err: any) {
     console.error("Error in /api/auth-token:", err);
     return NextResponse.json(
