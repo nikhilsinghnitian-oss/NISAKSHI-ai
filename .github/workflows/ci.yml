@@ -8,6 +8,7 @@ on:
   pull_request:
     branches:
       - main
+      - codex/phase-2-self-hosted-inference
 
 permissions:
   contents: read
