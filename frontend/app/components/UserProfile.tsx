@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
@@ -64,6 +65,12 @@ export default function UserProfile() {
           </p>
         </div>
       </div>
+      <Link
+        href="/account"
+        className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs text-slate-500 hover:bg-slate-800/60 hover:text-slate-300 transition-colors"
+      >
+        Account &amp; privacy
+      </Link>
       <button
         onClick={() => signOut({ callbackUrl: "/" })}
         className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs text-slate-600 hover:bg-slate-800/60 hover:text-slate-400 transition-colors"
