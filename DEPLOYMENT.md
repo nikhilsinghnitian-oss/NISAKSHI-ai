@@ -32,6 +32,7 @@ PostgreSQL (Neon)         Google Gemini API
 | `GEMINI_API_KEY` | Google Gemini API key |
 | `AUTH_SECRET` | Same HMAC secret as frontend |
 | `PORT` | Set automatically by most cloud providers |
+| `FRONTEND_ORIGINS` | Comma-separated exact browser origins; no wildcard origins |
 
 ---
 
@@ -52,7 +53,8 @@ pip install -r requirements.txt
 
 # Create backend/.env
 # GEMINI_API_KEY=your_key
-# AUTH_SECRET=your_shared_secret
+# AUTH_SECRET=<random secret with at least 32 bytes>
+# FRONTEND_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 
 python main.py
 # Backend runs on http://localhost:8000
@@ -139,12 +141,16 @@ Vercel auto-deploys from the main branch.
 5. Railway provides a public URL → set as `BACKEND_URL` in Vercel
 
 ### Option B: Google Cloud Run
+
+Do not put real secrets directly in shell command arguments or commit them to source control. Store `AUTH_SECRET` and the current provider key in Secret Manager; the shared `AUTH_SECRET` must contain at least 32 random bytes. Set `FRONTEND_ORIGINS` to the exact deployed frontend origin(s).
+
+The current backend enforces HMAC authentication on inference routes, while `/` and `/health` remain public liveness endpoints. Before production, Phase 3 must decide and verify private service invocation rather than relying only on application-level tokens.
+
+Deploy the source only after configuring the service variables and secrets in Cloud Run or Secret Manager-backed deployment settings:
+
 ```bash
 cd backend
-gcloud run deploy nisakshi-api \
-  --source . \
-  --set-env-vars GEMINI_API_KEY=xxx,AUTH_SECRET=xxx \
-  --allow-unauthenticated
+gcloud run deploy nisakshi-api --source . --region YOUR_REGION
 ```
 
 ### Option C: Render
@@ -184,7 +190,15 @@ gcloud run deploy nisakshi-api \
 
 ---
 
-## 10. Verification Checklist
+## 10. Security and deployment notes
+
+- The backend CORS allowlist is configured through `FRONTEND_ORIGINS`; production values must use exact HTTPS origins.
+- Frontend and backend `AUTH_SECRET` values must match and be at least 32 bytes. Rotate both together if exposed.
+- Inference request bodies and chat/image prompt lengths are bounded in the current code.
+- The CI workflow runs backend security tests and frontend lint/build checks. A green result is required before merging.
+- Current inference is still Gemini-backed. Phase 2 in `docs/PHASED_IMPLEMENTATION_PLAN.md` replaces it with self-hosted inference.
+
+## 11. Verification Checklist
 
 ```
 [ ] npm install succeeds
@@ -203,7 +217,7 @@ gcloud run deploy nisakshi-api \
 
 ---
 
-## 11. Known Limitations
+## 12. Known Limitations
 
 1. **Image generation on free tier**: Google Gemini free tier has 0 quota for image models. Image generation requires a paid API plan.
 2. **Middleware deprecation**: Next.js 16.3.x shows a warning about `middleware.ts` being deprecated in favor of `proxy`. This is non-blocking.
