@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { createToken } from "@/app/lib/auth-token";
 import { prisma } from "@/app/lib/db";
+import { getOrCreateActiveUser, accountDeletedResponse } from "@/app/lib/account-guard";
 import { NextResponse } from "next/server";
 
 const BACKEND_URL = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
@@ -42,16 +43,8 @@ export async function GET(request: Request, context: RouteContext) {
   }
 
   try {
-    const user = await prisma.user.upsert({
-      where: { email: session.user.email },
-      update: {},
-      create: {
-        email: session.user.email,
-        name: session.user.name,
-        image: session.user.image,
-      },
-      select: { id: true },
-    });
+    const user = await getOrCreateActiveUser(session.user.email, { name: session.user.name, image: session.user.image });
+    if (!user) return accountDeletedResponse();
     const asset = await prisma.fileAsset.findFirst({
       where: { id: fileId, userId: user.id, status: "READY" },
       select: { id: true, originalName: true, mimeType: true, sizeBytes: true },
@@ -111,16 +104,8 @@ export async function DELETE(request: Request, context: RouteContext) {
   }
 
   try {
-    const user = await prisma.user.upsert({
-      where: { email: session.user.email },
-      update: {},
-      create: {
-        email: session.user.email,
-        name: session.user.name,
-        image: session.user.image,
-      },
-      select: { id: true },
-    });
+    const user = await getOrCreateActiveUser(session.user.email, { name: session.user.name, image: session.user.image });
+    if (!user) return accountDeletedResponse();
     const asset = await prisma.fileAsset.findFirst({
       where: { id: fileId, userId: user.id },
       select: { id: true, status: true },
