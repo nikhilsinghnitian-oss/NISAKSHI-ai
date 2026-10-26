@@ -45,11 +45,17 @@ export async function verifyToken(
 ): Promise<{ userId: string } | null> {
   try {
     if (typeof token !== "string" || token.length > 4096) return null;
+
     const parts = token.split(".");
     if (parts.length !== 2) return null;
 
     const [payloadB64, signature] = parts;
-    if (\n      !payloadB64 ||\n      !signature ||\n      !/^[A-Za-z0-9_-]+$/.test(payloadB64) ||\n      !/^[A-Za-z0-9_-]+$/.test(signature)\n    ) {
+    if (
+      !payloadB64 ||
+      !signature ||
+      !/^[A-Za-z0-9_-]+$/.test(payloadB64) ||
+      !/^[A-Za-z0-9_-]+$/.test(signature)
+    ) {
       return null;
     }
 
