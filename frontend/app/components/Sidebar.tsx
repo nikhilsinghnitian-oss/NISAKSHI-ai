@@ -211,6 +211,19 @@ export default function Sidebar({
           </Link>
         </div>
 
+        <div className="px-3 pb-2">
+          <Link
+            href="/privacy"
+            className="flex w-full items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm text-slate-400 transition-colors hover:bg-slate-800/60 hover:text-blue-300"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4" />
+            </svg>
+            Data & Privacy
+          </Link>
+        </div>
+
         {/* Search */}
         <div className="px-3 pb-2">
           <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2">
