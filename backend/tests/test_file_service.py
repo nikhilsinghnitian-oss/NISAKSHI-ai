@@ -179,3 +179,40 @@ def test_storage_upload_does_not_overwrite_existing_object(monkeypatch):
 
     with pytest.raises(file_service.FileAlreadyExists):
         file_service.upload_object(user_id, file_id, b"second", checked)
+
+
+
+def test_delete_user_objects_only_deletes_verified_user_prefix(monkeypatch):
+    from services import file_service
+
+    class FakeBlob:
+        def __init__(self, bucket, name):
+            self.bucket = bucket
+            self.name = name
+            self.generation = 1
+
+        def delete(self, if_generation_match):
+            assert if_generation_match == self.generation
+            self.bucket.objects.pop(self.name, None)
+
+    class FakeBucket:
+        def __init__(self):
+            self.objects = {
+                "users/user_123/files/a": FakeBlob(self, "users/user_123/files/a"),
+                "users/user_123/files/b": FakeBlob(self, "users/user_123/files/b"),
+                "users/another_user/files/c": FakeBlob(self, "users/another_user/files/c"),
+                "users/user_123/other/d": FakeBlob(self, "users/user_123/other/d"),
+            }
+
+        def list_blobs(self, prefix):
+            return [blob for key, blob in list(self.objects.items()) if key.startswith(prefix)]
+
+    bucket = FakeBucket()
+    monkeypatch.setattr(file_service, "_get_bucket", lambda: bucket)
+
+    assert file_service.delete_user_objects("user_123") == 2
+    assert set(bucket.objects) == {
+        "users/another_user/files/c",
+        "users/user_123/other/d",
+    }
+    assert file_service.delete_user_objects("user_123") == 0
