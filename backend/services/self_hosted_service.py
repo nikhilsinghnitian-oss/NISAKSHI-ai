@@ -172,16 +172,17 @@ def generate_image(_client, prompt: str, model: str | None = None) -> dict:
             "error": "Self-hosted image generation is not configured yet.",
         }
 
-    model_id = (model or os.getenv("IMAGE_MODEL_ID", "")).strip()
-    if not model_id:
+    primary_model = os.getenv("IMAGE_MODEL_ID", "").strip()
+    if not primary_model:
         return {
             "success": False,
             "error": "IMAGE_MODEL_ID is not configured on this server.",
         }
 
+    model_id = (model or primary_model).strip()
     allowed = {
         item.strip()
-        for item in os.getenv("IMAGE_ALLOWED_MODELS", model_id).split(",")
+        for item in os.getenv("IMAGE_ALLOWED_MODELS", primary_model).split(",")
         if item.strip()
     }
     if model_id not in allowed:
