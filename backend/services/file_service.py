@@ -39,7 +39,22 @@ MIME_TYPES: dict[str, set[str]] = {
     ".wav": {"audio/wav", "audio/x-wav", "audio/vnd.wave"},
     ".m4a": {"audio/mp4", "audio/x-m4a"},
 }
-
+CANONICAL_MIME_TYPES = {
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".csv": "text/csv",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+}
 OFFICE_DOCUMENT_PARTS = {
     ".docx": "word/document.xml",
     ".pptx": "ppt/presentation.xml",
@@ -95,7 +110,7 @@ def validate_file_id(file_id: str) -> str:
 
 def sanitize_filename(filename: str) -> str:
     # Treat both POSIX and Windows separators as path boundaries; never keep a path.
-    leaf = str(filename or "").replace("\\\\", "/").split("/")[-1]
+    leaf = str(filename or "").replace(chr(92), "/").split("/")[-1]
     leaf = "".join("_" if ord(char) < 32 or ord(char) == 127 else char for char in leaf)
     leaf = leaf.strip().strip(".")
     if not leaf or len(leaf) > MAX_FILENAME_CHARS:
@@ -141,14 +156,14 @@ def validate_file(filename: str, content_type: str | None, data: bytes) -> Valid
 
     if extension == ".pdf" and not data.startswith(b"%PDF-"):
         raise FileValidationError("PDF signature is invalid")
-    elif extension == ".png" and not data.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):
+    elif extension == ".png" and not data.startswith(bytes.fromhex("89504e470d0a1a0a")):
         raise FileValidationError("PNG signature is invalid")
-    elif extension in {".jpg", ".jpeg"} and not data.startswith(b"\\xff\\xd8\\xff"):
+    elif extension in {".jpg", ".jpeg"} and not data.startswith(bytes.fromhex("ffd8ff")):
         raise FileValidationError("JPEG signature is invalid")
     elif extension == ".webp" and not (data.startswith(b"RIFF") and data[8:12] == b"WEBP"):
         raise FileValidationError("WebP signature is invalid")
     elif extension in OFFICE_DOCUMENT_PARTS:
-        if not data.startswith(b"PK\\x03\\x04"):
+        if not data.startswith(bytes.fromhex("504b0304")):
             raise FileValidationError("Office document signature is invalid")
         _validate_office_container(data, extension)
     elif extension in {".txt", ".md", ".csv"}:
@@ -156,7 +171,7 @@ def validate_file(filename: str, content_type: str | None, data: bytes) -> Valid
             decoded = data.decode("utf-8-sig")
         except UnicodeDecodeError:
             raise FileValidationError("Text files must use UTF-8 encoding") from None
-        if "\\x00" in decoded:
+        if chr(0) in decoded:
             raise FileValidationError("Text file contains binary data")
     elif extension == ".wav" and not (data.startswith(b"RIFF") and data[8:12] == b"WAVE"):
         raise FileValidationError("WAV signature is invalid")
@@ -168,10 +183,11 @@ def validate_file(filename: str, content_type: str | None, data: bytes) -> Valid
         if not (has_id3 or has_frame_sync):
             raise FileValidationError("MP3 signature is invalid")
 
+    mime_type = supplied_type if supplied_type in expected_types else CANONICAL_MIME_TYPES[extension]
     return ValidatedFile(
         filename=safe_name,
         extension=extension,
-        mime_type=next(iter(expected_types)) if supplied_type in {"", "application/octet-stream"} else supplied_type,
+        mime_type=mime_type,
         size_bytes=len(data),
         sha256=hashlib.sha256(data).hexdigest(),
     )
@@ -239,7 +255,7 @@ def download_object(user_id: str, file_id: str) -> tuple[bytes, str, str]:
             raise StoredObjectNotFound("Object not found")
         data = blob.download_as_bytes()
         mime_type = blob.content_type or "application/octet-stream"
-        filename = sanitize_filename(metadata.get("original_name", "download"))
+        filename = sanitize_filename(metadata.get("original_name", "download.bin"))
         return data, mime_type, filename
     except (FileStorageNotConfigured, StoredObjectNotFound):
         raise
