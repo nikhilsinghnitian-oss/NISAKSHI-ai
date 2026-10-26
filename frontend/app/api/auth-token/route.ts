@@ -1,7 +1,6 @@
 import { auth } from "@/auth";
 import { createToken } from "@/app/lib/auth-token";
 import { NextResponse } from "next/server";
-import { prisma } from "@/app/lib/db";
 import { getOrCreateActiveUser, accountDeletedResponse } from "@/app/lib/account-guard";
 
 // GET /api/auth-token — short-lived service token for authenticated integration clients.
