@@ -111,3 +111,12 @@ The user-facing page is available at `/files` and is linked from the chat sideba
 - Apply `frontend/prisma/phase5_account_controls.sql` only once to an existing database after a backup and staging test, or run `npx prisma db push` against a development/staging database after reviewing the schema. Do not run the SQL if `AccountDeletionStatus` or `DeletedAccount` already exists.
 - Tombstones contain a keyed HMAC digest of normalized email, not the email itself. Keep `AUTH_SECRET` stable for at least 30 days after deletion so the stale-session guard remains effective. This does not instantly purge backups; set and disclose database/object backup retention separately.
 - Account deletion is not considered verified until the backend has `GCS_BUCKET_NAME` configured, HTTP cleanup succeeds, and database/storage behavior has been tested together. Never test destructive deletion against production data.
+
+
+## Auth.js sign-in "Server error" on Vercel
+
+If the sign-in page displays "There is a problem with the server configuration", check the runtime logs for `MissingSecret`. This repository's frontend reads `AUTH_SECRET` (legacy `NEXTAUTH_SECRET` is also accepted) and Google OAuth credentials named `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`. They must be configured on the **same Vercel project and environment as the URL being opened**. Preview deployments do not inherit variables scoped only to Production or to another Vercel project.
+
+Configure Preview with a dedicated random `AUTH_SECRET`, Google preview OAuth client ID/secret, and a staging `DATABASE_URL`. If a preview calls a separate FastAPI backend, use the same preview-only `AUTH_SECRET` on that backend. Add the exact `https://YOUR-PREVIEW-HOST/api/auth/callback/google` URI to the Google OAuth Web client. Do not share production database/signing credentials with preview just to make the error disappear. After the environment is configured, redeploy because Vercel environment changes do not retroactively alter existing deployments.
+
+See [Vercel Auth.js troubleshooting](./docs/VERCEL_AUTH_TROUBLESHOOTING.md) and [frontend/.env.example](./frontend/.env.example) for the full checklist.
