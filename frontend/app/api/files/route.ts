@@ -117,9 +117,47 @@ export async function POST(request: Request) {
     }
   }
 
+  const multipartType = request.headers.get("content-type") || "";
+  if (!multipartType.toLowerCase().startsWith("multipart/form-data;")) {
+    return NextResponse.json({ error: "Content-Type must be multipart/form-data." }, { status: 415 });
+  }
+
+  // Enforce the actual streamed body size too; do not rely only on Content-Length.
+  const reader = request.body?.getReader();
+  if (!reader) {
+    return NextResponse.json({ error: "A file body is required." }, { status: 400 });
+  }
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_MULTIPART_BYTES) {
+        await reader.cancel();
+        return NextResponse.json({ error: "The file exceeds the upload limit." }, { status: 413 });
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return NextResponse.json({ error: "Unable to read the upload body." }, { status: 400 });
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bodyBytes = new Uint8Array(totalBytes);
+  let byteOffset = 0;
+  for (const chunk of chunks) {
+    bodyBytes.set(chunk, byteOffset);
+    byteOffset += chunk.byteLength;
+  }
+
   let form: FormData;
   try {
-    form = await request.formData();
+    form = await new Response(bodyBytes, {
+      headers: { "Content-Type": multipartType },
+    }).formData();
   } catch {
     return NextResponse.json({ error: "A valid multipart file upload is required." }, { status: 400 });
   }
