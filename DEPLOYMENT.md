@@ -90,7 +90,7 @@ The user-facing page is available at `/files` and is linked from the chat sideba
 
 - `GET /api/data-export` downloads a private JSON export containing the account profile, saved conversations/messages, and file metadata. Uploaded file bytes are not embedded in the JSON; use the authenticated download route or the `/files` page for each file.
 - `POST /api/data-controls` requires a signed-in session, an explicit same-origin request, action `delete_all`, and the exact confirmation `DELETE ALL MY NISAKSHI DATA`.
-- The deletion endpoint removes private GCS objects first and then deletes conversations/messages and file metadata in a database transaction. If object storage fails part-way through, the database records remain so the user can retry; object deletion is idempotent.
+- The deletion endpoint refuses to start if any file is marked `UPLOADING`, removes private GCS objects first, and then deletes conversations/messages and file metadata in a database transaction. If object storage fails part-way through, the database records remain so the user can retry; object deletion is idempotent.
 - This is a **delete-all saved content** action, not account closure: the Google sign-in identity remains. It does not purge provider backups; backup expiry must follow the configured retention policy.
 - These application routes are code-only until the Phase 4 schema is applied and the private bucket/service-account permissions are configured.
 
