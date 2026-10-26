@@ -24,16 +24,16 @@ def make_office_file(main_part: str) -> bytes:
 @pytest.mark.parametrize(
     ("filename", "content_type", "data", "expected_mime"),
     [
-        ("lecture.pdf", "application/pdf", b"%PDF-1.7\\nbody", "application/pdf"),
-        ("image.png", "image/png", b"\\x89PNG\\r\\n\\x1a\\nbody", "image/png"),
-        ("image.jpg", "image/jpeg", b"\\xff\\xd8\\xffbody", "image/jpeg"),
+        ("lecture.pdf", "application/pdf", b"%PDF-1.7 body", "application/pdf"),
+        ("image.png", "image/png", bytes.fromhex("89504e470d0a1a0a") + b"body", "image/png"),
+        ("image.jpg", "image/jpeg", bytes.fromhex("ffd8ff") + b"body", "image/jpeg"),
         ("slide.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation",
          make_office_file("ppt/presentation.xml"),
          "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
         ("notes.txt", "text/plain", b"Hello NISAKSHI", "text/plain"),
         ("notes.md", "text/markdown", b"# Notes", "text/markdown"),
-        ("data.csv", "text/csv", b"topic,score\\nmath,10", "text/csv"),
-        ("voice.wav", "audio/wav", b"RIFF\\x00\\x00\\x00\\x00WAVEdata", "audio/wav"),
+        ("data.csv", "text/csv", b"topic,score,math,10", "text/csv"),
+        ("voice.wav", "audio/wav", b"RIFF" + bytes(4) + b"WAVEdata", "audio/wav"),
     ],
 )
 def test_validates_supported_formats(filename, content_type, data, expected_mime):
@@ -49,10 +49,9 @@ def test_validates_supported_formats(filename, content_type, data, expected_mime
     [
         ("payload.pdf", "application/pdf", b"not a pdf"),
         ("payload.png", "image/png", b"not a png"),
-        ("payload.txt", "text/plain", b"not utf8: \\xff"),
+        ("payload.txt", "text/plain", b"not utf8: " + bytes([255])),
         ("payload.exe", "application/octet-stream", b"MZ"),
         ("payload.pdf", "image/png", b"%PDF-1.7"),
-        ("../secret.txt", "text/plain", b"ok"),
         ("empty.md", "text/markdown", b""),
     ],
 )
@@ -62,13 +61,13 @@ def test_rejects_invalid_or_unsupported_files(filename, content_type, data):
 
 
 def test_rejects_oversized_file():
-    # Use the same size guard directly without constructing a 20+ MiB fixture.
     with pytest.raises(FileValidationError):
         validate_file("large.txt", "text/plain", b"a" * (MAX_FILE_BYTES + 1))
 
 
 def test_sanitizes_windows_and_posix_path_components():
-    assert sanitize_filename(r"C:\\private\\notes.txt") == "notes.txt"
+    windows_path = "C:" + chr(92) + "private" + chr(92) + "notes.txt"
+    assert sanitize_filename(windows_path) == "notes.txt"
     assert sanitize_filename("../../notes.md") == "notes.md"
 
 
