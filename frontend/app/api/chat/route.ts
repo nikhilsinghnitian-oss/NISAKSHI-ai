@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { createToken } from "@/app/lib/auth-token";
 import { readJsonObject } from "@/app/lib/request-validation";
 import { NextResponse } from "next/server";
-import { prisma } from "@/app/lib/db";
+import { getOrCreateActiveUser, accountDeletedResponse } from "@/app/lib/account-guard";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://127.0.0.1:8000";
 const MAX_CHAT_BODY_BYTES = 64 * 1024;
@@ -38,16 +38,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    const user = await prisma.user.upsert({
-      where: { email: session.user.email },
-      update: {},
-      create: {
-        email: session.user.email,
-        name: session.user.name,
-        image: session.user.image,
-      },
-      select: { id: true },
-    });
+    const user = await getOrCreateActiveUser(session.user.email, { name: session.user.name, image: session.user.image });
+    if (!user) return accountDeletedResponse();
 
     const token = await createToken(user.id);
     const backendRes = await fetch(`${BACKEND_URL}/chat`, {

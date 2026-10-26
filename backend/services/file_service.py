@@ -295,3 +295,36 @@ def delete_object(user_id: str, file_id: str) -> None:
     except Exception as exc:
         logger.warning("Private file deletion failed (%s)", type(exc).__name__)
         raise FileStorageUnavailable("Private file storage is unavailable") from None
+
+
+def delete_user_objects(user_id: str) -> int:
+    """Delete every private object under this verified user's namespace.
+
+    This is used during account deletion so objects without a database metadata row
+    are also removed. The prefix always comes from the authenticated backend token.
+    """
+    owner_id = validate_user_id(user_id)
+    prefix = f"users/{owner_id}/files/"
+    deleted = 0
+    try:
+        bucket = _get_bucket()
+        for blob in bucket.list_blobs(prefix=prefix):
+            if not isinstance(blob.name, str) or not blob.name.startswith(prefix):
+                continue
+            try:
+                blob.delete(if_generation_match=blob.generation)
+                deleted += 1
+            except NotFound:
+                # Idempotent under concurrent retries or a prior partial deletion.
+                continue
+        return deleted
+    except FileStorageNotConfigured:
+        raise
+    except GoogleAPICallError as exc:
+        logger.warning("Private user storage cleanup failed (%s)", type(exc).__name__)
+        raise FileStorageUnavailable("Private file storage is unavailable") from None
+    except FileStorageUnavailable:
+        raise
+    except Exception as exc:
+        logger.warning("Private user storage cleanup failed (%s)", type(exc).__name__)
+        raise FileStorageUnavailable("Private file storage is unavailable") from None

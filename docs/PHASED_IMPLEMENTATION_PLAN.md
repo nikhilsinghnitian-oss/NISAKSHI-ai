@@ -1,7 +1,7 @@
 # NISAKSHI AI — Phased Implementation Plan
 
 **Status date:** 2026-10-26
-**Working branch:** `codex/phase-4-secure-file-workspace`
+**Working branch:** `codex/phase-5-private-data-controls`
 **Production branch:** `main` (kept unchanged during this work)
 
 ## Product goal
@@ -56,11 +56,12 @@ Build NISAKSHI as a private, multi-user AI workspace with a self-hosted inferenc
 - **Still required:** re-run CI after the latest changes, a real private bucket integration test, production schema rollout, and cross-user API tests against the HTTP endpoints.
 
 ### Phase 5 — Private chat, history, and data controls
-- Make PostgreSQL-backed conversation history the source of truth; remove full-message localStorage persistence where feasible.
-- Verify conversation ownership for every read/write/update/delete path.
-- Add account data export and delete-all/account deletion flows, with object and index cleanup.
-- Define retention, backup deletion windows, encryption at rest/in transit, and application-level encryption only where key management is designed and recoverable.
-- **Exit criteria:** cross-user isolation and deletion tests pass; privacy policy accurately reflects actual data flows.
+**Status: account export/deletion controls implemented on the Phase 5 branch; CI and live cleanup verification pending**
+- Add an account export for profile, chats, messages, and private-file metadata. Original uploaded file bytes remain individually downloadable and are not embedded in the JSON export.
+- Add account deletion with a pending tombstone, backend cleanup of the authenticated user's private GCS prefix, and a database transaction that deletes the user and cascaded chat/file metadata only after storage cleanup succeeds.
+- Every frontend API route that resolves or creates a user checks the deletion tombstone so an old session cannot silently recreate a deleted account. Failed storage cleanup keeps the account locked and supports retry.
+- Tombstones store a keyed email digest, not the raw email. The completion tombstone expires after a 30-day stale-session grace period; keep `AUTH_SECRET` stable for that window.
+- **Still required:** validate the additive `frontend/prisma/phase5_account_controls.sql` rollout in staging, confirm a configured private GCS backend, run deletion retry/cross-user tests against the actual HTTP endpoints, and document provider backup retention windows. The feature is not live-verified until these tests pass.
 
 ### Phase 6 — Retrieval-augmented generation (RAG)
 - Build parsing, chunking, metadata filtering, and per-user vector retrieval.

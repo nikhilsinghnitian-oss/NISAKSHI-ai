@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { readJsonObject } from "@/app/lib/request-validation";
 import { prisma } from "@/app/lib/db";
+import { getOrCreateActiveUser, accountDeletedResponse } from "@/app/lib/account-guard";
 import { NextResponse } from "next/server";
 
 const MAX_MESSAGE_BODY_BYTES = 1_500_000;
@@ -48,15 +49,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid message fields" }, { status: 400 });
     }
 
-    const user = await prisma.user.upsert({
-      where: { email: session.user.email },
-      update: {},
-      create: {
-        email: session.user.email,
-        name: session.user.name,
-        image: session.user.image,
-      },
-    });
+    const user = await getOrCreateActiveUser(session.user.email, { name: session.user.name, image: session.user.image });
+    if (!user) return accountDeletedResponse();
 
     // Verify conversation ownership before saving message.
     const conversation = await prisma.conversation.findUnique({

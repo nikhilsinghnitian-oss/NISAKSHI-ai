@@ -22,6 +22,7 @@ from services.file_service import (
     FileValidationError,
     StoredObjectNotFound,
     delete_object,
+    delete_user_objects,
     download_object,
     upload_object,
     validate_file,
@@ -178,6 +179,26 @@ async def upload_user_file(
         "sha256": checked.sha256,
         "status": "stored",
     }
+
+
+
+@app.delete("/users/me/files")
+def delete_all_user_files(authorization: str = Header(default="")):
+    """Remove every object in the verified user's private file namespace."""
+    user_id = get_user_id(authorization)
+    try:
+        deleted = delete_user_objects(user_id)
+    except FileValidationError:
+        raise HTTPException(status_code=400, detail="Invalid user identity") from None
+    except FileStorageNotConfigured:
+        raise HTTPException(status_code=503, detail="Private file storage is not configured") from None
+    except FileStorageUnavailable:
+        raise HTTPException(status_code=503, detail="Private file storage is unavailable") from None
+    return Response(
+        content=json.dumps({"deleted_objects": deleted}),
+        media_type="application/json",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 @app.get("/files/{file_id}/download")
