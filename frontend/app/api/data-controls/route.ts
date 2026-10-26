@@ -60,8 +60,15 @@ export async function POST(request: Request) {
 
     const files = await prisma.fileAsset.findMany({
       where: { userId: user.id },
-      select: { id: true },
+      select: { id: true, status: true },
     });
+    if (files.some((file) => file.status === "UPLOADING")) {
+      return NextResponse.json(
+        { error: "A file upload is still in progress. Wait for it to finish, then retry data deletion." },
+        { status: 409, headers: privateHeaders }
+      );
+    }
+
     const token = await createToken(user.id);
 
     // Use small concurrent batches so account deletion cannot fan out unbounded requests.
