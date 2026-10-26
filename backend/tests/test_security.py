@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -7,7 +8,7 @@ import time
 import pytest
 from fastapi import HTTPException
 
-from security import get_user_id, verify_token
+from security import RequestBodyLimitMiddleware, get_user_id, verify_token
 
 
 SECRET = "local-test-secret-with-more-than-32-bytes"
@@ -100,3 +101,36 @@ def test_rejects_missing_bearer_header():
     with pytest.raises(HTTPException) as exc:
         get_user_id("")
     assert exc.value.status_code == 401
+
+
+def test_request_body_limit_catches_chunked_oversized_body():
+    async def run_test():
+        called = False
+        sent = []
+
+        async def downstream(scope, receive, send):
+            nonlocal called
+            called = True
+
+        async def receive():
+            return {
+                "type": "http.request",
+                "body": b"12345",
+                "more_body": False,
+            }
+
+        async def send(message):
+            sent.append(message)
+
+        middleware = RequestBodyLimitMiddleware(downstream, {"/chat": 4})
+        await middleware(
+            {"type": "http", "method": "POST", "path": "/chat", "headers": []},
+            receive,
+            send,
+        )
+
+        assert called is False
+        assert sent[0]["type"] == "http.response.start"
+        assert sent[0]["status"] == 413
+
+    asyncio.run(run_test())
