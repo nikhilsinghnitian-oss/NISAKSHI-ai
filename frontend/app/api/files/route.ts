@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { auth } from "@/auth";
 import { createToken } from "@/app/lib/auth-token";
 import { prisma } from "@/app/lib/db";
+import { getOrCreateActiveUser, accountDeletedResponse } from "@/app/lib/account-guard";
 import { NextResponse } from "next/server";
 
 const BACKEND_URL = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
@@ -53,19 +54,8 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const user = await prisma.user.upsert({
-      where: { email: session.user.email },
-      update: {
-        name: session.user.name ?? undefined,
-        image: session.user.image ?? undefined,
-      },
-      create: {
-        email: session.user.email,
-        name: session.user.name,
-        image: session.user.image,
-      },
-      select: { id: true },
-    });
+    const user = await getOrCreateActiveUser(session.user.email, { name: session.user.name, image: session.user.image });
+    if (!user) return accountDeletedResponse();
 
     const files = await prisma.fileAsset.findMany({
       where: { userId: user.id },
@@ -180,16 +170,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const user = await prisma.user.upsert({
-      where: { email: session.user.email },
-      update: {},
-      create: {
-        email: session.user.email,
-        name: session.user.name,
-        image: session.user.image,
-      },
-      select: { id: true },
-    });
+    const user = await getOrCreateActiveUser(session.user.email, { name: session.user.name, image: session.user.image });
+    if (!user) return accountDeletedResponse();
 
     const fileId = randomUUID();
     const storageKey = "users/" + user.id + "/files/" + fileId;
