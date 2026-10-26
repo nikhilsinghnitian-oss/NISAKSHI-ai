@@ -2,208 +2,102 @@
 
 ## Architecture
 
+```text
+Browser
+  ↓
+Next.js frontend (Vercel or another web host)
+  ├── Auth.js session + PostgreSQL
+  └── authenticated server-side proxy
+          ↓ private service/network boundary
+      FastAPI backend (cloud compute)
+          ├── self-hosted OpenAI-compatible model server
+          └── private Google Cloud Storage bucket
 ```
-Frontend (Next.js)         Backend (FastAPI)
-    ↓                          ↓
-Vercel                    Cloud Run / Railway / Render
-    ↓                          ↓
-PostgreSQL (Neon)         Google Gemini API
-```
 
----
+**Object storage holds files; it does not run the model server.** The model runtime requires compute, and inference requests should stay within NISAKSHI-controlled services. The repo provides configurable interfaces; cloud resources and model weights are not automatically provisioned.
 
-## 1. Required Environment Variables
+## Environment variables
 
-### Frontend (Vercel)
+### Frontend
 
 | Variable | Description |
 |---|---|
 | `AUTH_GOOGLE_ID` | Google OAuth Client ID |
 | `AUTH_GOOGLE_SECRET` | Google OAuth Client Secret |
-| `AUTH_SECRET` | NextAuth HMAC secret (shared with backend) |
-| `AUTH_TRUST_HOST` | Set to `true` |
+| `AUTH_SECRET` | Auth.js secret and shared backend-token key; at least 32 random bytes |
+| `AUTH_TRUST_HOST` | Set to `true` on supported hosted deployments |
 | `DATABASE_URL` | PostgreSQL connection string |
-| `BACKEND_URL` | Deployed backend URL (e.g. `https://nisakshi-api.up.railway.app`) |
+| `BACKEND_URL` | FastAPI service URL; prefer private/internal address where hosting allows |
 
-### Backend (Cloud Run / Railway / Render)
+### Backend
 
 | Variable | Description |
 |---|---|
-| `GEMINI_API_KEY` | Google Gemini API key |
-| `AUTH_SECRET` | Same HMAC secret as frontend |
-| `PORT` | Set automatically by most cloud providers |
+| `AUTH_SECRET` | Same high-entropy value as the frontend |
+| `FRONTEND_ORIGINS` | Exact browser origins, comma-separated |
+| `MODEL_SERVER_BASE_URL` | Self-hosted OpenAI-compatible model endpoint |
+| `NISAKSHI_MODEL_ID` | Default model ID |
+| `NISAKSHI_ALLOWED_MODELS` | Optional server-approved model IDs |
+| `GCS_BUCKET_NAME` | Private GCS bucket for file objects |
+| `PORT` | HTTP port supplied by the hosting platform |
 
----
+See `backend/.env.example` for local placeholders. No real secrets belong in source control.
 
-## 2. Local Development Setup
-
-### Prerequisites
-- Node.js 20+
-- Python 3.11+
-- Git
+## Local development
 
 ### Backend
+
 ```bash
 cd backend
 python -m venv venv
-# Windows: .\venv\Scripts\activate
-# Linux/Mac: source venv/bin/activate
+# Windows: .\\venv\\Scripts\\activate
+# Linux/macOS: source venv/bin/activate
 pip install -r requirements.txt
-
-# Create backend/.env
-# GEMINI_API_KEY=your_key
-# AUTH_SECRET=your_shared_secret
-
+# Optional local file storage: authenticate with Google Application Default Credentials
+# and set GCS_BUCKET_NAME to a private test bucket. Never test deletion against production.
 python main.py
-# Backend runs on http://localhost:8000
 ```
+
+The backend listens on `http://localhost:8000` by default. `GET /health` checks liveness; `GET /ready` checks whether the text model server is reachable. File endpoints fail closed if `GCS_BUCKET_NAME` is not configured. On Cloud Run, the attached backend service account is used through Application Default Credentials.
 
 ### Frontend
+
 ```bash
 cd frontend
-npm install
-
-# Create frontend/.env.local with:
-# AUTH_GOOGLE_ID=your_google_client_id
-# AUTH_GOOGLE_SECRET=your_google_client_secret
-# AUTH_SECRET=same_shared_secret_as_backend
-# AUTH_TRUST_HOST=true
-# DATABASE_URL=postgresql://user:pass@host/db?sslmode=require
-# BACKEND_URL=http://localhost:8000
-
-npx prisma db push   # Creates tables in your PostgreSQL database
-npm run dev           # Frontend runs on http://localhost:3000
-```
-
----
-
-## 3. Database Setup
-
-### Production: Neon (free PostgreSQL)
-1. Go to https://neon.tech
-2. Create a free account and project
-3. Copy the connection string (starts with `postgresql://`)
-4. Set as `DATABASE_URL` in Vercel and in local `.env.local`
-
-### Push Schema to Database
-Run once after setting `DATABASE_URL`:
-```bash
-cd frontend
+npm ci
+# Set frontend/.env.local with Auth.js, DATABASE_URL, and BACKEND_URL.
+npx prisma generate
 npx prisma db push
+npm run dev
 ```
 
-This creates the User, Conversation, and Message tables.
+After adding `FileAsset` to the Prisma schema, apply the schema to an isolated development database with `npx prisma db push`. For an existing database created from the prior schema, `frontend/prisma/phase4_file_asset.sql` is the additive SQL for a one-time, reviewed rollout. Back up the database first, test the SQL in staging, and apply it only if neither `FileAssetStatus` nor `FileAsset` already exists (for example: `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f prisma/phase4_file_asset.sql` from `frontend/`). This repository had no prior Prisma migration history, so do not blindly run `prisma migrate deploy`; baseline the existing schema as a separate, reviewed operation before adopting a migration history.
 
----
+## File workspace (Phase 4)
 
-## 4. Prisma Commands
+The authenticated server-side endpoints are:
 
-```bash
-cd frontend
-npx prisma generate    # Generate Prisma client (runs automatically during build)
-npx prisma db push     # Push schema to database (run once per new database)
-npx prisma studio      # Visual database browser (local only)
-```
+- `GET /api/files` — list up to 100 records owned by the current user.
+- `POST /api/files` — upload a file, create a metadata record, and mark it `READY` only after the backend confirms the stored checksum.
+- `GET /api/files/:fileId` — download through the authenticated application proxy.
+- `DELETE /api/files/:fileId` — delete the private object before deleting its metadata row.
 
----
+Supported formats currently include PDF, PNG/JPEG/WebP, DOCX, PPTX, XLSX, UTF-8 TXT/Markdown/CSV, MP3, WAV, and M4A. Legacy Office formats such as DOC/XLS/PPT are not accepted. The backend enforces a 20 MiB file limit, signature/content checks, bounded Office ZIP metadata, safe filenames, and owner-derived object keys. The Next.js proxy has a conservative 4 MiB file limit to stay below common serverless request-body limits; raising this requires a larger gateway or a designed, short-lived signed-upload flow. The backend does not publish public objects or return bucket URLs.
 
-## 5. Vercel Deployment
+The user-facing page is available at `/files` and is linked from the chat sidebar. The frontend database needs the `FileAsset` schema change before the APIs can work. The bucket must exist, and the backend service account must have object permissions. Upload, download, and delete have not yet been verified against a live bucket; document parsing/RAG and malware scanning remain future work.
 
-### Settings
-- **Root Directory**: `frontend`
-- **Build Command**: `prisma generate && next build` (already in package.json)
-- **Install Command**: `npm install` (runs `postinstall` which runs `prisma generate`)
+## Cloud deployment notes
 
-### Environment Variables
-Set all 6 frontend variables listed in Section 1 in Vercel dashboard → Settings → Environment Variables.
+- Terraform in `cloud/terraform` describes a private bucket with public-access prevention and uniform bucket-level access.
+- It binds `GCS_BUCKET_NAME` to the bucket and grants the backend runtime identity access to objects.
+- `deploy_backend` defaults to `false`; `allow_public_invocation` defaults to `false`. Do not flip public invocation on without reviewing authentication, rate limiting, and Vercel-to-private-service connectivity.
+- Put `AUTH_SECRET` and private service credentials in Secret Manager. The configured secret must have a version before deploying a service that references it.
+- No GCP project, bucket, model server, database, or live deployment has been created by these source changes.
+- A passing CI build does not validate OAuth callbacks, database access, bucket IAM, model availability, backup/restore, or production user isolation.
 
-### Deploy
-```bash
-# From project root
-git add -A
-git commit -m "deploy: production-ready"
-git push origin main
-```
+## Security boundaries and remaining work
 
-Vercel auto-deploys from the main branch.
-
----
-
-## 6. Backend Deployment
-
-### Option A: Railway
-1. Connect your GitHub repo
-2. Set root directory to `backend`
-3. Set start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-4. Add environment variables: `GEMINI_API_KEY`, `AUTH_SECRET`
-5. Railway provides a public URL → set as `BACKEND_URL` in Vercel
-
-### Option B: Google Cloud Run
-```bash
-cd backend
-gcloud run deploy nisakshi-api \
-  --source . \
-  --set-env-vars GEMINI_API_KEY=xxx,AUTH_SECRET=xxx \
-  --allow-unauthenticated
-```
-
-### Option C: Render
-1. Connect repo, set root to `backend`
-2. Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-3. Add env vars
-
----
-
-## 7. Google OAuth Configuration
-
-### Google Cloud Console
-1. Go to https://console.cloud.google.com/apis/credentials
-2. Edit your OAuth 2.0 Client
-3. Add **Authorized redirect URIs**:
-   - Local: `http://localhost:3000/api/auth/callback/google`
-   - Production: `https://your-app.vercel.app/api/auth/callback/google`
-
----
-
-## 8. Gemini Configuration
-
-- Get API key from https://aistudio.google.com/
-- Set `GEMINI_API_KEY` in backend environment
-- Text model: `gemini-3.5-flash` (with 5 fallback models)
-- Image models: `gemini-3.1-flash-image`, `gemini-3-pro-image`, `gemini-2.5-flash-image`
-- Free tier: ~20 text requests/day/model, 0 image requests/day (requires paid plan)
-
----
-
-## 9. Frontend ↔ Backend URL
-
-- Frontend API routes (`/api/chat`, `/api/image`) proxy requests to the backend
-- `BACKEND_URL` is server-side only (never exposed to browser)
-- Locally defaults to `http://127.0.0.1:8000` if not set
-- In production, set `BACKEND_URL` in Vercel to your deployed backend URL
-
----
-
-## 10. Verification Checklist
-
-```
-[ ] npm install succeeds
-[ ] npx prisma generate succeeds
-[ ] npm run build succeeds
-[ ] Backend starts (python main.py)
-[ ] GET /health returns 200
-[ ] Text chat works
-[ ] Image generation works (requires paid Gemini plan)
-[ ] Google login works
-[ ] Chat history persists across page refresh
-[ ] No OpenRouter/OmniRoute references
-[ ] No Gemini branding in UI
-[ ] No secrets in git
-```
-
----
-
-## 11. Known Limitations
-
-1. **Image generation on free tier**: Google Gemini free tier has 0 quota for image models. Image generation requires a paid API plan.
-2. **Middleware deprecation**: Next.js 16.3.x shows a warning about `middleware.ts` being deprecated in favor of `proxy`. This is non-blocking.
+- Do not rely on CORS as authentication; inference and file endpoints verify the short-lived signed service token.
+- Do not pass credentials in shell history or source control.
+- Uploaded files are stored only; this phase does not parse or execute them. Document parsing, malware scanning, async ingestion jobs, per-user retrieval, retention/export, and shared-gateway rate limits remain future phases.
+- Check model and dataset licenses before download or deployment. Model weights are not included in this repository.

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import UserProfile from "./UserProfile";
 import type { DbConversation } from "../chat/page";
@@ -195,6 +196,19 @@ export default function Sidebar({
             </svg>
             New Chat
           </button>
+        </div>
+
+        <div className="px-3 pb-2">
+          <Link
+            href="/files"
+            className="flex w-full items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm text-slate-400 transition-colors hover:bg-slate-800/60 hover:text-blue-300"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 3h7l5 5v12a1 1 0 01-1 1H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 3v5h5M8 13h8M8 17h8" />
+            </svg>
+            Private File Library
+          </Link>
         </div>
 
         {/* Search */}
