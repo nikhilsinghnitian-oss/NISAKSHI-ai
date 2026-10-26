@@ -80,7 +80,7 @@ export async function POST(request: Request) {
       }
     }
 
-    await prisma.$transaction([
+    const [deletedConversations, deletedFiles] = await prisma.$transaction([
       prisma.conversation.deleteMany({ where: { userId: user.id } }),
       prisma.fileAsset.deleteMany({ where: { userId: user.id } }),
     ]);
@@ -88,8 +88,8 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: true,
-        deletedConversationCount: (await prisma.conversation.count({ where: { userId: user.id } })) === 0,
-        deletedFileCount: files.length,
+        deletedConversationCount: deletedConversations.count,
+        deletedFileCount: deletedFiles.count,
         accountKept: true,
       },
       { headers: privateHeaders }
