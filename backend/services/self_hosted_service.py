@@ -101,9 +101,11 @@ def stream_text(_client, message: str, model: str | None = None) -> Iterator[dic
     }
 
     try:
+        headers = _auth_headers("MODEL_SERVER_API_KEY")
+        headers["Accept"] = "text/event-stream, application/json"
         with requests.post(
             f"{base_url}/chat/completions",
-            headers=_auth_headers("MODEL_SERVER_API_KEY"),
+            headers=headers,
             json=request_payload,
             stream=True,
             timeout=(DEFAULT_TIMEOUT_CONNECT_SECONDS, DEFAULT_TIMEOUT_READ_SECONDS),
@@ -180,11 +182,12 @@ def generate_image(_client, prompt: str, model: str | None = None) -> dict:
         }
 
     model_id = (model or primary_model).strip()
-    allowed = {
-        item.strip()
-        for item in os.getenv("IMAGE_ALLOWED_MODELS", primary_model).split(",")
-        if item.strip()
-    }
+    configured_image_models = os.getenv("IMAGE_ALLOWED_MODELS", "").strip()
+    allowed = (
+        {item.strip() for item in configured_image_models.split(",") if item.strip()}
+        if configured_image_models
+        else {primary_model}
+    )
     if model_id not in allowed:
         return {
             "success": False,
@@ -246,6 +249,20 @@ def check_text_model_server() -> tuple[bool, str]:
         if response.status_code in {401, 403}:
             return False, "authentication_failed"
         response.raise_for_status()
+        model_id = configured_text_model()
+        try:
+            body = response.json()
+        except (ValueError, json.JSONDecodeError):
+            return True, "ready"
+
+        model_items = body.get("data", []) if isinstance(body, dict) else []
+        loaded_ids = {
+            item.get("id")
+            for item in model_items
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        }
+        if loaded_ids and model_id not in loaded_ids:
+            return False, "model_not_loaded"
         return True, "ready"
     except InferenceNotConfigured:
         return False, "not_configured"
