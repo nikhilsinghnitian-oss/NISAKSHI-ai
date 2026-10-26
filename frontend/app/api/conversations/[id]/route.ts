@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { readJsonObject } from "@/app/lib/request-validation";
 import { prisma } from "@/app/lib/db";
+import { getOrCreateActiveUser } from "@/app/lib/account-guard";
 import { NextResponse } from "next/server";
 
 const privateHeaders = { "Cache-Control": "no-store, private" };
@@ -11,12 +12,8 @@ async function getUserAndConversation(
 ) {
   if (!email) return { error: "Unauthorized", status: 401 };
 
-  const user = await prisma.user.upsert({
-    where: { email },
-    update: {},
-    create: { email, name: email.split("@")[0] },
-    select: { id: true },
-  });
+  const user = await getOrCreateActiveUser(email);
+  if (!user) return { error: "Account deletion is pending or completed. Sign out to continue.", status: 410 };
 
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
