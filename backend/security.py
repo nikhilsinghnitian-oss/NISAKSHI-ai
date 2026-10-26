@@ -78,3 +78,60 @@ def get_user_id(authorization: str = Header(default="")) -> str:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Unauthorized")
     return verify_token(authorization[7:])
+
+
+class RequestBodyLimitMiddleware:
+    """Bound inference request bodies before JSON parsing."""
+
+    def __init__(self, app, limits: dict[str, int]):
+        self.app = app
+        self.limits = limits
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("path") not in self.limits:
+            await self.app(scope, receive, send)
+            return
+
+        limit = self.limits[scope["path"]]
+        headers = dict(scope.get("headers", []))
+        raw_length = headers.get(b"content-length")
+        if raw_length:
+            try:
+                if int(raw_length) > limit:
+                    response = JSONResponse({"detail": "Request body too large"}, status_code=413)
+                    await response(scope, receive, send)
+                    return
+            except ValueError:
+                response = JSONResponse({"detail": "Invalid Content-Length"}, status_code=400)
+                await response(scope, receive, send)
+                return
+
+        messages = []
+        total = 0
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            if message["type"] != "http.request":
+                messages.append(message)
+                continue
+            total += len(message.get("body", b""))
+            if total > limit:
+                response = JSONResponse({"detail": "Request body too large"}, status_code=413)
+                await response(scope, receive, send)
+                return
+            messages.append(message)
+            if not message.get("more_body", False):
+                break
+
+        index = 0
+
+        async def replay_receive():
+            nonlocal index
+            if index < len(messages):
+                message = messages[index]
+                index += 1
+                return message
+            return await receive()
+
+        await self.app(scope, replay_receive, send)
