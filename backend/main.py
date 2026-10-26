@@ -79,8 +79,8 @@ def chat(request: ChatRequest, authorization: str = Header(default="")):
 
     def model_stream():
         for update in stream_text(client, request.message, model=request.model):
-            yield f"data: {json.dumps(update)}\\n\\n"
-        yield "data: [DONE]\\n\\n"
+            yield f"data: {json.dumps(update)}\n\n"
+        yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         model_stream(),
