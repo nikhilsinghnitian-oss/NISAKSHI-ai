@@ -9,3 +9,7 @@ node_modules/
 *.db
 cloudflared.exe
 .neon
+
+# Model weights are large and license-governed; never commit them.
+models/
+*.gguf

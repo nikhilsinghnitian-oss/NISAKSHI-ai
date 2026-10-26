@@ -53,7 +53,7 @@ function detectImageIntent(text: string): boolean {
 }
 
 export default function ChatPage() {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const router = useRouter();
   const [conversations, setConversations] = useState<DbConversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -65,6 +65,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.innerWidth < 768) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Initial sidebar state syncs with a browser-only viewport value.
       setSidebarOpen(false);
     }
   }, []);
@@ -85,8 +86,10 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Authentication changes trigger an asynchronous fetch that populates server-backed state.
       loadConversations();
     } else if (status === "unauthenticated") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Stop the loading view when Auth.js resolves to a signed-out session.
       setReady(true);
       router.push("/");
     }
@@ -101,8 +104,10 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (activeId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Load the selected conversation from the server after the active ID changes.
       loadMessages(activeId);
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Clear messages when there is no selected conversation.
       setActiveMessages([]);
     }
   }, [activeId, loadMessages]);
@@ -325,9 +330,11 @@ export default function ChatPage() {
       if (fullContent) {
         await saveMessage(finalConvId, "assistant", fullContent, model, { type: "text" });
       }
-    } catch (err: any) {
-      console.error(err);
-      const errMsg = err.message || "AI service is temporarily unavailable. Please try again.";
+    } catch (err: unknown) {
+      console.error("Chat request failed:", err instanceof Error ? err.name : "unknown error");
+      const errMsg = err instanceof Error
+        ? err.message
+        : "AI service is temporarily unavailable. Please try again.";
       setActiveMessages((prev) =>
         prev.map((m) => (m.id === asstId ? { ...m, content: errMsg, type: "text" } : m))
       );
