@@ -2,222 +2,186 @@
 
 ## Architecture
 
+```text
+Browser
+  ↓
+Next.js frontend (Vercel or another web host)
+  ├── Auth.js session + PostgreSQL (Neon now; managed private PostgreSQL in cloud phase)
+  └── authenticated server-side proxy
+          ↓ private service/network boundary
+      FastAPI backend (cloud compute)
+          ├── self-hosted OpenAI-compatible text model server
+          ├── optional self-hosted image model server
+          └── private object storage (added in cloud/file phases)
 ```
-Frontend (Next.js)         Backend (FastAPI)
-    ↓                          ↓
-Vercel                    Cloud Run / Railway / Render
-    ↓                          ↓
-PostgreSQL (Neon)         Google Gemini API
-```
+
+**Object storage holds files; it does not run the model server.** The AI model runtime requires compute, and inference requests should stay within NISAKSHI-controlled services. The source code currently provides a configurable API interface for a self-hosted OpenAI-compatible model server; cloud resources and model weights are not automatically provisioned by this repository.
 
 ---
 
-## 1. Required Environment Variables
+## 1. Required environment variables
 
-### Frontend (Vercel)
+### Frontend
 
 | Variable | Description |
 |---|---|
 | `AUTH_GOOGLE_ID` | Google OAuth Client ID |
 | `AUTH_GOOGLE_SECRET` | Google OAuth Client Secret |
-| `AUTH_SECRET` | NextAuth HMAC secret (shared with backend) |
-| `AUTH_TRUST_HOST` | Set to `true` |
+| `AUTH_SECRET` | Auth.js secret and shared backend-token key; at least 32 random bytes |
+| `AUTH_TRUST_HOST` | Set to `true` on supported hosted deployments |
 | `DATABASE_URL` | PostgreSQL connection string |
-| `BACKEND_URL` | Deployed backend URL (e.g. `https://nisakshi-api.up.railway.app`) |
+| `BACKEND_URL` | FastAPI service URL; prefer a private/internal address where your hosting allows it |
 
-### Backend (Cloud Run / Railway / Render)
+### Backend
 
 | Variable | Description |
 |---|---|
-| `GEMINI_API_KEY` | Google Gemini API key |
-| `AUTH_SECRET` | Same HMAC secret as frontend |
-| `PORT` | Set automatically by most cloud providers |
+| `AUTH_SECRET` | Same high-entropy value as the frontend |
 | `FRONTEND_ORIGINS` | Comma-separated exact browser origins; no wildcard origins |
+| `MODEL_SERVER_BASE_URL` | Self-hosted OpenAI-compatible inference API base URL, normally ending in `/v1` |
+| `NISAKSHI_MODEL_ID` | Default model ID configured on the private model server |
+| `NISAKSHI_ALLOWED_MODELS` | Optional comma-separated additional model IDs users may select |
+| `MODEL_SERVER_API_KEY` | Optional credential for a private model service; never expose it to the browser |
+| `IMAGE_SERVER_BASE_URL` | Optional self-hosted image API base URL |
+| `IMAGE_MODEL_ID` | Optional server-configured image model ID |
+| `IMAGE_ALLOWED_MODELS` | Optional image-model allowlist |
+| `IMAGE_SERVER_API_KEY` | Optional credential for the private image service |
+| `PORT` | HTTP port supplied by the hosting platform |
+
+See `backend/.env.example` for local placeholders. No real secrets belong in source control.
 
 ---
 
-## 2. Local Development Setup
+## 2. Local development
 
 ### Prerequisites
-- Node.js 20+
+
+- Node.js 20+ (CI uses Node.js 22)
 - Python 3.11+
-- Git
+- A PostgreSQL database for persisted conversations
+- A reachable self-hosted model server that implements OpenAI-compatible Chat Completions streaming
 
 ### Backend
+
 ```bash
 cd backend
 python -m venv venv
-# Windows: .\venv\Scripts\activate
-# Linux/Mac: source venv/bin/activate
+# Windows: .\\venv\\Scripts\\activate
+# Linux/macOS: source venv/bin/activate
 pip install -r requirements.txt
 
-# Create backend/.env
-# GEMINI_API_KEY=your_key
-# AUTH_SECRET=<random secret with at least 32 bytes>
-# FRONTEND_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
-
+# Copy .env.example to .env and set AUTH_SECRET, MODEL_SERVER_BASE_URL,
+# and NISAKSHI_MODEL_ID. Do not set any hosted AI inference provider key.
 python main.py
-# Backend runs on http://localhost:8000
 ```
 
+The FastAPI backend listens on `http://localhost:8000` by default. `GET /health` checks process liveness; `GET /ready` checks whether the configured text model server can be reached. A 503 from `/ready` means the endpoint or model is not configured/reachable.
+
 ### Frontend
+
 ```bash
 cd frontend
-npm install
+npm ci
 
-# Create frontend/.env.local with:
+# Create frontend/.env.local and set:
 # AUTH_GOOGLE_ID=your_google_client_id
 # AUTH_GOOGLE_SECRET=your_google_client_secret
-# AUTH_SECRET=same_shared_secret_as_backend
+# AUTH_SECRET=the_same_random_secret_as_the_backend
 # AUTH_TRUST_HOST=true
 # DATABASE_URL=postgresql://user:pass@host/db?sslmode=require
 # BACKEND_URL=http://localhost:8000
 
-npx prisma db push   # Creates tables in your PostgreSQL database
-npm run dev           # Frontend runs on http://localhost:3000
-```
-
----
-
-## 3. Database Setup
-
-### Production: Neon (free PostgreSQL)
-1. Go to https://neon.tech
-2. Create a free account and project
-3. Copy the connection string (starts with `postgresql://`)
-4. Set as `DATABASE_URL` in Vercel and in local `.env.local`
-
-### Push Schema to Database
-Run once after setting `DATABASE_URL`:
-```bash
-cd frontend
+npx prisma generate
 npx prisma db push
+npm run dev
 ```
-
-This creates the User, Conversation, and Message tables.
 
 ---
 
-## 4. Prisma Commands
+## 3. Database setup
+
+The current Prisma schema uses PostgreSQL. For development, use an isolated database. For production, select a managed database only after checking region, backups, connectivity, pricing, and deletion/retention requirements.
 
 ```bash
 cd frontend
-npx prisma generate    # Generate Prisma client (runs automatically during build)
-npx prisma db push     # Push schema to database (run once per new database)
-npx prisma studio      # Visual database browser (local only)
+npx prisma generate
+npx prisma db push
+npx prisma studio
 ```
 
----
-
-## 5. Vercel Deployment
-
-### Settings
-- **Root Directory**: `frontend`
-- **Build Command**: `prisma generate && next build` (already in package.json)
-- **Install Command**: `npm install` (runs `postinstall` which runs `prisma generate`)
-
-### Environment Variables
-Set all 6 frontend variables listed in Section 1 in Vercel dashboard → Settings → Environment Variables.
-
-### Deploy
-```bash
-# From project root
-git add -A
-git commit -m "deploy: production-ready"
-git push origin main
-```
-
-Vercel auto-deploys from the main branch.
+Use reviewed schema migrations as the project matures; avoid applying schema changes blindly to a production database.
 
 ---
 
-## 6. Backend Deployment
+## 4. Web frontend deployment
 
-### Option A: Railway
-1. Connect your GitHub repo
-2. Set root directory to `backend`
-3. Set start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-4. Add environment variables: `GEMINI_API_KEY`, `AUTH_SECRET`
-5. Railway provides a public URL → set as `BACKEND_URL` in Vercel
+For Vercel or another Next.js host:
 
-### Option B: Google Cloud Run
+- Root directory: `frontend`
+- Build command: `npm run build`
+- Required variables: `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_SECRET`, `AUTH_TRUST_HOST`, `DATABASE_URL`, `BACKEND_URL`
 
-Do not put real secrets directly in shell command arguments or commit them to source control. Store `AUTH_SECRET` and the current provider key in Secret Manager; the shared `AUTH_SECRET` must contain at least 32 random bytes. Set `FRONTEND_ORIGINS` to the exact deployed frontend origin(s).
+Configure the Google OAuth callback URLs for the exact local and production origin. Keep `AUTH_SECRET` out of client-prefixed variables. Set production cookies and HTTPS through the hosting provider.
 
-The current backend enforces HMAC authentication on inference routes, while `/` and `/health` remain public liveness endpoints. Before production, Phase 3 must decide and verify private service invocation rather than relying only on application-level tokens.
-
-Deploy the source only after configuring the service variables and secrets in Cloud Run or Secret Manager-backed deployment settings:
-
-```bash
-cd backend
-gcloud run deploy nisakshi-api --source . --region YOUR_REGION
-```
-
-### Option C: Render
-1. Connect repo, set root to `backend`
-2. Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-3. Add env vars
+The frontend deployment is independent from model serving: deploying the web UI does not deploy the AI weights or inference runtime.
 
 ---
 
-## 7. Google OAuth Configuration
+## 5. Backend deployment notes
 
-### Google Cloud Console
-1. Go to https://console.cloud.google.com/apis/credentials
-2. Edit your OAuth 2.0 Client
-3. Add **Authorized redirect URIs**:
-   - Local: `http://localhost:3000/api/auth/callback/google`
-   - Production: `https://your-app.vercel.app/api/auth/callback/google`
+The backend can be packaged for a cloud compute platform, but its model endpoint must be separately deployed and reachable through a private/internal network route where supported.
 
----
+- Set `MODEL_SERVER_BASE_URL` to the internal address of your own model runtime.
+- Set `NISAKSHI_MODEL_ID` to a model ID served by that runtime.
+- Put `AUTH_SECRET` and any private service credentials in the platform's secret manager.
+- Use the exact HTTPS frontend origin(s) in `FRONTEND_ORIGINS`.
+- Do not rely on CORS as authentication. The inference endpoints also verify the signed short-lived service token.
+- Keep model-serving endpoints out of the public internet when the selected platform supports private service connectivity.
+- Do not pass secrets in shell history or command-line environment flags.
+- A public health endpoint can report liveness; it must not return credentials, model-server URL, user data, or upstream exception details.
 
-## 8. Gemini Configuration
-
-- Get API key from https://aistudio.google.com/
-- Set `GEMINI_API_KEY` in backend environment
-- Text model: `gemini-3.5-flash` (with 5 fallback models)
-- Image models: `gemini-3.1-flash-image`, `gemini-3-pro-image`, `gemini-2.5-flash-image`
-- Free tier: ~20 text requests/day/model, 0 image requests/day (requires paid plan)
+Cloud compute, artifact registry, managed PostgreSQL, object-storage bucket, private networking, secret manager, quotas, and backups are not created automatically. These are Phase 3 deployment tasks and require an actual project, region, and cost decision.
 
 ---
 
-## 9. Frontend ↔ Backend URL
+## 6. Self-hosted inference protocol
 
-- Frontend API routes (`/api/chat`, `/api/image`) proxy requests to the backend
-- `BACKEND_URL` is server-side only (never exposed to browser)
-- Locally defaults to `http://127.0.0.1:8000` if not set
-- In production, set `BACKEND_URL` in Vercel to your deployed backend URL
+The text backend calls `POST {MODEL_SERVER_BASE_URL}/chat/completions` with an OpenAI-compatible JSON body and reads Server-Sent Events. The model endpoint and optional bearer key are server configuration only; a chat request cannot choose its own URL. A user-supplied model ID must belong to the server-configured model allowlist.
+
+The optional image service is expected to implement `POST {IMAGE_SERVER_BASE_URL}/images/generations` and return base64 data at `data[0].b64_json`. NISAKSHI does not fetch a remote image URL returned by the service. Image generation returns a controlled “not configured” response until the private image service is set up.
+
+The configured service should run a compatible open-weight model whose license permits your intended use. Model weights are not included in this repository; choose the model and check its license before downloading or deploying it.
 
 ---
 
-## 10. Security and deployment notes
+## 7. Verification checklist
 
-- The backend CORS allowlist is configured through `FRONTEND_ORIGINS`; production values must use exact HTTPS origins.
-- Frontend and backend `AUTH_SECRET` values must match and be at least 32 bytes. Rotate both together if exposed.
-- Inference request bodies and chat/image prompt lengths are bounded in the current code.
-- The CI workflow runs backend security tests and frontend lint/build checks. A green result is required before merging.
-- Current inference is still Gemini-backed. Phase 2 in `docs/PHASED_IMPLEMENTATION_PLAN.md` replaces it with self-hosted inference.
-
-## 11. Verification Checklist
-
-```
-[ ] npm install succeeds
-[ ] npx prisma generate succeeds
+```text
+[ ] npm ci succeeds
+[ ] npm run lint succeeds
 [ ] npm run build succeeds
-[ ] Backend starts (python main.py)
+[ ] python -m compileall -q backend succeeds
+[ ] pytest passes
 [ ] GET /health returns 200
-[ ] Text chat works
-[ ] Image generation works (requires paid Gemini plan)
-[ ] Google login works
-[ ] Chat history persists across page refresh
-[ ] No OpenRouter/OmniRoute references
-[ ] No Gemini branding in UI
-[ ] No secrets in git
+[ ] GET /ready returns ready when private model server is healthy
+[ ] Text streaming works with hosted AI provider keys unset
+[ ] Missing model configuration fails safely
+[ ] Invalid/expired service tokens are rejected
+[ ] Oversized request bodies are rejected before parsing
+[ ] Cross-user conversation isolation is tested
+[ ] Production model service is private/internal
+[ ] OAuth and database settings are verified in the target environment
+[ ] No secrets committed in current files or Git history
+[ ] Backup, restore, and data-deletion procedures are verified
 ```
+
+CI runs backend tests and frontend lint/build checks. Passing CI alone does not prove the cloud model runtime, OAuth callbacks, database access, or user isolation have been tested against a live deployment.
 
 ---
 
-## 12. Known Limitations
+## 8. Known limitations
 
-1. **Image generation on free tier**: Google Gemini free tier has 0 quota for image models. Image generation requires a paid API plan.
-2. **Middleware deprecation**: Next.js 16.3.x shows a warning about `middleware.ts` being deprecated in favor of `proxy`. This is non-blocking.
+- Cloud resources and model weights are not provisioned by the code branch.
+- The local GPU has 4 GB VRAM; treat local model experiments as small quantized-model tests, not production capacity tests.
+- Self-hosted image and audio capabilities require their own runtimes and are not automatically available because text inference works.
+- Rate limiting/quotas at the shared gateway, attachment storage and ingestion, per-user vector retrieval, account-wide export/deletion, and production monitoring remain later phases.
