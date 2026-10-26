@@ -6,20 +6,17 @@
 Browser
   ↓
 Next.js frontend (Vercel or another web host)
-  ├── Auth.js session + PostgreSQL (Neon now; managed private PostgreSQL in cloud phase)
+  ├── Auth.js session + PostgreSQL
   └── authenticated server-side proxy
           ↓ private service/network boundary
       FastAPI backend (cloud compute)
-          ├── self-hosted OpenAI-compatible text model server
-          ├── optional self-hosted image model server
-          └── private object storage (added in cloud/file phases)
+          ├── self-hosted OpenAI-compatible model server
+          └── private Google Cloud Storage bucket
 ```
 
-**Object storage holds files; it does not run the model server.** The AI model runtime requires compute, and inference requests should stay within NISAKSHI-controlled services. The source code currently provides a configurable API interface for a self-hosted OpenAI-compatible model server; cloud resources and model weights are not automatically provisioned by this repository.
+**Object storage holds files; it does not run the model server.** The model runtime requires compute, and inference requests should stay within NISAKSHI-controlled services. The repo provides configurable interfaces; cloud resources and model weights are not automatically provisioned.
 
----
-
-## 1. Required environment variables
+## Environment variables
 
 ### Frontend
 
@@ -30,36 +27,23 @@ Next.js frontend (Vercel or another web host)
 | `AUTH_SECRET` | Auth.js secret and shared backend-token key; at least 32 random bytes |
 | `AUTH_TRUST_HOST` | Set to `true` on supported hosted deployments |
 | `DATABASE_URL` | PostgreSQL connection string |
-| `BACKEND_URL` | FastAPI service URL; prefer a private/internal address where your hosting allows it |
+| `BACKEND_URL` | FastAPI service URL; prefer private/internal address where hosting allows |
 
 ### Backend
 
 | Variable | Description |
 |---|---|
 | `AUTH_SECRET` | Same high-entropy value as the frontend |
-| `FRONTEND_ORIGINS` | Comma-separated exact browser origins; no wildcard origins |
-| `MODEL_SERVER_BASE_URL` | Self-hosted OpenAI-compatible inference API base URL, normally ending in `/v1` |
-| `NISAKSHI_MODEL_ID` | Default model ID configured on the private model server |
-| `NISAKSHI_ALLOWED_MODELS` | Optional comma-separated additional model IDs users may select |
-| `MODEL_SERVER_API_KEY` | Optional credential for a private model service; never expose it to the browser |
-| `IMAGE_SERVER_BASE_URL` | Optional self-hosted image API base URL |
-| `IMAGE_MODEL_ID` | Optional server-configured image model ID |
-| `IMAGE_ALLOWED_MODELS` | Optional image-model allowlist |
-| `IMAGE_SERVER_API_KEY` | Optional credential for the private image service |
+| `FRONTEND_ORIGINS` | Exact browser origins, comma-separated |
+| `MODEL_SERVER_BASE_URL` | Self-hosted OpenAI-compatible model endpoint |
+| `NISAKSHI_MODEL_ID` | Default model ID |
+| `NISAKSHI_ALLOWED_MODELS` | Optional server-approved model IDs |
+| `GCS_BUCKET_NAME` | Private GCS bucket for file objects |
 | `PORT` | HTTP port supplied by the hosting platform |
 
 See `backend/.env.example` for local placeholders. No real secrets belong in source control.
 
----
-
-## 2. Local development
-
-### Prerequisites
-
-- Node.js 20+ (CI uses Node.js 22)
-- Python 3.11+
-- A PostgreSQL database for persisted conversations
-- A reachable self-hosted model server that implements OpenAI-compatible Chat Completions streaming
+## Local development
 
 ### Backend
 
@@ -69,119 +53,51 @@ python -m venv venv
 # Windows: .\\venv\\Scripts\\activate
 # Linux/macOS: source venv/bin/activate
 pip install -r requirements.txt
-
-# Copy .env.example to .env and set AUTH_SECRET, MODEL_SERVER_BASE_URL,
-# and NISAKSHI_MODEL_ID. Do not set any hosted AI inference provider key.
+# Optional local file storage: authenticate with Google Application Default Credentials
+# and set GCS_BUCKET_NAME to a private test bucket. Never test deletion against production.
 python main.py
 ```
 
-The FastAPI backend listens on `http://localhost:8000` by default. `GET /health` checks process liveness; `GET /ready` checks whether the configured text model server can be reached. A 503 from `/ready` means the endpoint or model is not configured/reachable.
+The backend listens on `http://localhost:8000` by default. `GET /health` checks liveness; `GET /ready` checks whether the text model server is reachable. File endpoints fail closed if `GCS_BUCKET_NAME` is not configured. On Cloud Run, the attached backend service account is used through Application Default Credentials.
 
 ### Frontend
 
 ```bash
 cd frontend
 npm ci
-
-# Create frontend/.env.local and set:
-# AUTH_GOOGLE_ID=your_google_client_id
-# AUTH_GOOGLE_SECRET=your_google_client_secret
-# AUTH_SECRET=the_same_random_secret_as_the_backend
-# AUTH_TRUST_HOST=true
-# DATABASE_URL=postgresql://user:pass@host/db?sslmode=require
-# BACKEND_URL=http://localhost:8000
-
+# Set frontend/.env.local with Auth.js, DATABASE_URL, and BACKEND_URL.
 npx prisma generate
 npx prisma db push
 npm run dev
 ```
 
----
+After adding `FileAsset` to the Prisma schema, apply the schema to an isolated development database with `npx prisma db push`. For production, create and review a controlled migration/rollout rather than applying schema changes blindly.
 
-## 3. Database setup
+## File workspace (Phase 4)
 
-The current Prisma schema uses PostgreSQL. For development, use an isolated database. For production, select a managed database only after checking region, backups, connectivity, pricing, and deletion/retention requirements.
+The authenticated server-side endpoints are:
 
-```bash
-cd frontend
-npx prisma generate
-npx prisma db push
-npx prisma studio
-```
+- `GET /api/files` — list up to 100 records owned by the current user.
+- `POST /api/files` — upload a file, create a metadata record, and mark it `READY` only after the backend confirms the stored checksum.
+- `GET /api/files/:fileId` — download through the authenticated application proxy.
+- `DELETE /api/files/:fileId` — delete the private object before deleting its metadata row.
 
-Use reviewed schema migrations as the project matures; avoid applying schema changes blindly to a production database.
+Supported formats currently include PDF, PNG/JPEG/WebP, DOCX, PPTX, XLSX, UTF-8 TXT/Markdown/CSV, MP3, WAV, and M4A. Legacy Office formats such as DOC/XLS/PPT are not accepted. The backend enforces a 20 MiB file limit, signature/content checks, bounded Office ZIP metadata, safe filenames, and owner-derived object keys. The Next.js proxy has a conservative 4 MiB file limit to stay below common serverless request-body limits; raising this requires a larger gateway or a designed, short-lived signed-upload flow. The backend does not publish public objects or return bucket URLs.
 
----
+The frontend database needs the `FileAsset` schema change before these API routes can work. The bucket must exist, and the backend service account must have object permissions. Upload, download, and delete have not yet been verified against a live bucket, and the user-facing file manager UI and document parsing/RAG are still future work.
 
-## 4. Web frontend deployment
+## Cloud deployment notes
 
-For Vercel or another Next.js host:
+- Terraform in `cloud/terraform` describes a private bucket with public-access prevention and uniform bucket-level access.
+- It binds `GCS_BUCKET_NAME` to the bucket and grants the backend runtime identity access to objects.
+- `deploy_backend` defaults to `false`; `allow_public_invocation` defaults to `false`. Do not flip public invocation on without reviewing authentication, rate limiting, and Vercel-to-private-service connectivity.
+- Put `AUTH_SECRET` and private service credentials in Secret Manager. The configured secret must have a version before deploying a service that references it.
+- No GCP project, bucket, model server, database, or live deployment has been created by these source changes.
+- A passing CI build does not validate OAuth callbacks, database access, bucket IAM, model availability, backup/restore, or production user isolation.
 
-- Root directory: `frontend`
-- Build command: `npm run build`
-- Required variables: `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_SECRET`, `AUTH_TRUST_HOST`, `DATABASE_URL`, `BACKEND_URL`
+## Security boundaries and remaining work
 
-Configure the Google OAuth callback URLs for the exact local and production origin. Keep `AUTH_SECRET` out of client-prefixed variables. Set production cookies and HTTPS through the hosting provider.
-
-The frontend deployment is independent from model serving: deploying the web UI does not deploy the AI weights or inference runtime.
-
----
-
-## 5. Backend deployment notes
-
-The backend can be packaged for a cloud compute platform, but its model endpoint must be separately deployed and reachable through a private/internal network route where supported.
-
-- Set `MODEL_SERVER_BASE_URL` to the internal address of your own model runtime.
-- Set `NISAKSHI_MODEL_ID` to a model ID served by that runtime.
-- Put `AUTH_SECRET` and any private service credentials in the platform's secret manager.
-- Use the exact HTTPS frontend origin(s) in `FRONTEND_ORIGINS`.
-- Do not rely on CORS as authentication. The inference endpoints also verify the signed short-lived service token.
-- Keep model-serving endpoints out of the public internet when the selected platform supports private service connectivity.
-- Do not pass secrets in shell history or command-line environment flags.
-- A public health endpoint can report liveness; it must not return credentials, model-server URL, user data, or upstream exception details.
-
-Cloud compute, artifact registry, managed PostgreSQL, object-storage bucket, private networking, secret manager, quotas, and backups are not created automatically. These are Phase 3 deployment tasks and require an actual project, region, and cost decision.
-
----
-
-## 6. Self-hosted inference protocol
-
-The text backend calls `POST {MODEL_SERVER_BASE_URL}/chat/completions` with an OpenAI-compatible JSON body and reads Server-Sent Events. The model endpoint and optional bearer key are server configuration only; a chat request cannot choose its own URL. A user-supplied model ID must belong to the server-configured model allowlist.
-
-The optional image service is expected to implement `POST {IMAGE_SERVER_BASE_URL}/images/generations` and return base64 data at `data[0].b64_json`. NISAKSHI does not fetch a remote image URL returned by the service. Image generation returns a controlled “not configured” response until the private image service is set up.
-
-The configured service should run a compatible open-weight model whose license permits your intended use. Model weights are not included in this repository; choose the model and check its license before downloading or deploying it.
-
----
-
-## 7. Verification checklist
-
-```text
-[ ] npm ci succeeds
-[ ] npm run lint succeeds
-[ ] npm run build succeeds
-[ ] python -m compileall -q backend succeeds
-[ ] pytest passes
-[ ] GET /health returns 200
-[ ] GET /ready returns ready when private model server is healthy
-[ ] Text streaming works with hosted AI provider keys unset
-[ ] Missing model configuration fails safely
-[ ] Invalid/expired service tokens are rejected
-[ ] Oversized request bodies are rejected before parsing
-[ ] Cross-user conversation isolation is tested
-[ ] Production model service is private/internal
-[ ] OAuth and database settings are verified in the target environment
-[ ] No secrets committed in current files or Git history
-[ ] Backup, restore, and data-deletion procedures are verified
-```
-
-CI runs backend tests and frontend lint/build checks. Passing CI alone does not prove the cloud model runtime, OAuth callbacks, database access, or user isolation have been tested against a live deployment.
-
----
-
-## 8. Known limitations
-
-- Cloud resources and model weights are not provisioned by the code branch.
-- The local GPU has 4 GB VRAM; treat local model experiments as small quantized-model tests, not production capacity tests.
-- Self-hosted image and audio capabilities require their own runtimes and are not automatically available because text inference works.
-- Rate limiting/quotas at the shared gateway, attachment storage and ingestion, per-user vector retrieval, account-wide export/deletion, and production monitoring remain later phases.
+- Do not rely on CORS as authentication; inference and file endpoints verify the short-lived signed service token.
+- Do not pass credentials in shell history or source control.
+- Uploaded files are stored only; this phase does not parse or execute them. Document parsing, malware scanning, async ingestion jobs, per-user retrieval, retention/export, shared-gateway rate limits, and a file manager UI remain future phases.
+- Check model and dataset licenses before download or deployment. Model weights are not included in this repository.
