@@ -20,12 +20,12 @@ logger = logging.getLogger(__name__)
 TEXT_MODEL = os.getenv("GEMINI_TEXT_MODEL", "gemini-3.5-flash")
 
 TEXT_FALLBACKS = [
-    "gemini-3.5-flash",
-    "gemini-3.6-flash",
-    "gemini-3.7-flash",
-    "gemini-3.8-flash",
+    # Prefer the faster Flash-Lite model and widely available stable fallbacks
+    # before retrying the model that recently returned 503/high-demand errors.
     "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-3.8-flash",
 ]
 
 # ─── Image model configuration ───
@@ -108,6 +108,9 @@ def stream_text(client: genai.Client, message: str, model: str | None = None):
         ),
         # Keep ordinary responses bounded without making them unnecessarily long.
         max_output_tokens=4096,
+        # Bound a stalled first-token response so one provider request cannot
+        # leave the chat waiting for Vercel's full 300-second function limit.
+        http_options=types.HttpOptions(timeout=60000),
     )
 
     last_error = ""
