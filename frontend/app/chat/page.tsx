@@ -328,9 +328,20 @@ export default function ChatPage() {
         }
       }
 
-      // Preserve database message ordering, but only after tokens have already streamed to the UI.
+      // Never leave a blank assistant bubble if the provider ends a stream without text.
       await userSavePromise;
-      if (fullContent) {
+      if (!fullContent.trim()) {
+        const emptyResponseMessage =
+          "NISAKSHI did not receive a text response from the model. Please send your message again.";
+        setActiveMessages((prev) =>
+          prev.map((m) =>
+            m.id === asstId
+              ? { ...m, content: emptyResponseMessage, type: "text" }
+              : m
+          )
+        );
+        await saveMessage(finalConvId, "assistant", emptyResponseMessage, model, { type: "text" });
+      } else {
         await saveMessage(finalConvId, "assistant", fullContent, model, { type: "text" });
       }
     } catch (err: any) {
