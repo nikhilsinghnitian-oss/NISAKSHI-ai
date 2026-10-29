@@ -20,19 +20,24 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
-    raise RuntimeError("GEMINI_API_KEY is missing in .env")
-
-client = genai.Client(api_key=api_key)
+# Keep the API process bootable so health diagnostics can still run if a key is missing.
+# Never log or return the key itself.
+client = genai.Client(api_key=api_key) if api_key else None
 
 app = FastAPI(title="NISAKSHI AI API")
 
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv("FRONTEND_ORIGINS", "http://localhost:3000").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://.*",
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
@@ -119,7 +124,16 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "healthy"}
+    return {"status": "healthy", "gemini_configured": client is not None}
+
+
+@app.get("/ready")
+def ready():
+    if not os.getenv("AUTH_SECRET", "").strip():
+        raise HTTPException(status_code=503, detail="Backend AUTH_SECRET is not configured")
+    if client is None:
+        raise HTTPException(status_code=503, detail="Backend GEMINI_API_KEY is not configured")
+    return {"status": "ready"}
 
 
 # ─────────────────────────────────────────────
@@ -132,6 +146,11 @@ def chat(
     authorization: str = Header(default=""),
 ):
     user_id = get_user_id(authorization)
+    if client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="The backend GEMINI_API_KEY is not configured. Add it to the backend deployment environment.",
+        )
 
     def gemini_stream():
         for update in stream_text(client, request.message, model=request.model):
@@ -151,6 +170,11 @@ def gen_image(
     authorization: str = Header(default=""),
 ):
     user_id = get_user_id(authorization)
+    if client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="The backend GEMINI_API_KEY is not configured. Add it to the backend deployment environment.",
+        )
 
     result = generate_image(client, request.prompt, model=request.model)
 
