@@ -226,7 +226,10 @@ export default function ChatPage() {
     setActiveMessages((prev) => [...prev, tempUserMsg, tempAsstMsg]);
     setLoading(true);
 
-    await saveMessage(finalConvId, "user", text, model, { type: "text" });
+    // Save the user message in parallel with generation, rather than making the model wait on DB writes.
+    const userSavePromise = saveMessage(finalConvId, "user", text, model, { type: "text" }).catch((err) => {
+      console.error("Failed to save user message:", err);
+    });
 
     // ── IMAGE GENERATION (POST /api/image) ──
     if (isImage) {
@@ -244,6 +247,7 @@ export default function ChatPage() {
               m.id === asstId ? { ...m, imageUrl: data.image_url, type: "image" } : m
             )
           );
+          await userSavePromise;
           await saveMessage(finalConvId, "assistant", "", model, {
             imageUrl: data.image_url,
             type: "image",
@@ -253,6 +257,7 @@ export default function ChatPage() {
           setActiveMessages((prev) =>
             prev.map((m) => (m.id === asstId ? { ...m, content: errMsg, type: "text" } : m))
           );
+          await userSavePromise;
           await saveMessage(finalConvId, "assistant", errMsg, model, { type: "text" });
         }
       } catch {
@@ -261,6 +266,7 @@ export default function ChatPage() {
           prev.map((m) => (m.id === asstId ? { ...m, content: errMsg, type: "text" } : m))
         );
       } finally {
+        await userSavePromise;
         setLoading(false);
         loadConversations();
       }
@@ -322,6 +328,8 @@ export default function ChatPage() {
         }
       }
 
+      // Preserve database message ordering, but only after tokens have already streamed to the UI.
+      await userSavePromise;
       if (fullContent) {
         await saveMessage(finalConvId, "assistant", fullContent, model, { type: "text" });
       }
