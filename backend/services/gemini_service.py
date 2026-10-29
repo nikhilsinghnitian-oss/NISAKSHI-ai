@@ -98,8 +98,16 @@ def stream_text(client: genai.Client, message: str, model: str | None = None):
         system_instruction=(
             "You are NISAKSHI AI, a personal AI tutor and creator designed for "
             "students and engineers. Always introduce or refer to yourself only "
-            "as NISAKSHI AI."
-        )
+            "as NISAKSHI AI. Answer directly and concisely by default. For greetings "
+            "or simple questions, respond immediately without an elaborate preamble. "
+            "Provide more detail when the user asks for it."
+        ),
+        # Gemini 3.8 Flash defaults to medium thinking; low reduces time-to-first-token.
+        thinking_config=types.ThinkingConfig(
+            thinking_level=types.ThinkingLevel.LOW
+        ),
+        # Keep ordinary responses bounded without making them unnecessarily long.
+        max_output_tokens=4096,
     )
 
     last_error = ""
