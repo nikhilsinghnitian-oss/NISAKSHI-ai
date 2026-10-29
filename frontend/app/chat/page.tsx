@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Sidebar from "../components/Sidebar";
@@ -63,6 +63,11 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [ready, setReady] = useState(false);
 
+  // Prevent history-loading requests from overwriting messages in a live stream.
+  const skipNextMessageLoadRef = useRef<string | null>(null);
+  const messageLoadVersionRef = useRef(0);
+  const sendInProgressRef = useRef(false);
+
   useEffect(() => {
     if (typeof window !== "undefined" && window.innerWidth < 768) {
       setSidebarOpen(false);
@@ -93,15 +98,30 @@ export default function ChatPage() {
   }, [status, loadConversations, router]);
 
   const loadMessages = useCallback(async (id: string) => {
+    const version = ++messageLoadVersionRef.current;
     const res = await fetch(`/api/conversations/${id}`);
     if (!res.ok) return;
     const data = await res.json();
+
+    // A late history response must never replace optimistic/streaming messages.
+    if (
+      version !== messageLoadVersionRef.current ||
+      sendInProgressRef.current
+    ) {
+      return;
+    }
     setActiveMessages(data.conversation?.messages || []);
   }, []);
 
   useEffect(() => {
     if (activeId) {
-      loadMessages(activeId);
+      // A newly created conversation has no history to load yet. Fetching here
+      // can race with the first reply and erase its streaming assistant bubble.
+      if (skipNextMessageLoadRef.current === activeId) {
+        skipNextMessageLoadRef.current = null;
+        return;
+      }
+      void loadMessages(activeId);
     } else {
       setActiveMessages([]);
     }
@@ -122,6 +142,7 @@ export default function ChatPage() {
     const conv = await createConversation("New Chat");
     if (!conv) return;
     setConversations((prev) => [conv, ...prev]);
+    skipNextMessageLoadRef.current = conv.id;
     setActiveId(conv.id);
     setActiveMessages([]);
     setSelectedModel(undefined);
@@ -180,15 +201,23 @@ export default function ChatPage() {
   };
 
   const sendMessage = async (text: string) => {
-    if (loading) return;
+    // A ref guard is synchronous, so rapid Enter/click events cannot start
+    // duplicate requests before React has rendered the loading state.
+    if (sendInProgressRef.current || loading) return;
+    sendInProgressRef.current = true;
+    messageLoadVersionRef.current += 1;
 
     let convId = activeId;
     if (!convId) {
       const title = genTitle(text);
-      const conv = await createConversation(title);
-      if (!conv) return;
+      const conv = await createConversation(title).catch(() => null);
+      if (!conv) {
+        sendInProgressRef.current = false;
+        return;
+      }
       convId = conv.id;
       setConversations((prev) => [conv, ...prev]);
+      skipNextMessageLoadRef.current = convId;
       setActiveId(convId);
     } else {
       const activeConv = conversations.find((c) => c.id === convId);
@@ -267,6 +296,7 @@ export default function ChatPage() {
         );
       } finally {
         await userSavePromise;
+        sendInProgressRef.current = false;
         setLoading(false);
         loadConversations();
       }
@@ -351,6 +381,7 @@ export default function ChatPage() {
         prev.map((m) => (m.id === asstId ? { ...m, content: errMsg, type: "text" } : m))
       );
     } finally {
+      sendInProgressRef.current = false;
       setLoading(false);
       loadConversations();
     }
