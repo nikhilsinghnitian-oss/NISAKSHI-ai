@@ -236,7 +236,7 @@ def chat(
             model=model,
             attachments=attachments,
         ):
-            yield f"data: {json.dumps(update)}\\n\\n"
+            yield f"data: {json.dumps(update)}\n\n"
 
     return StreamingResponse(gemini_stream(), media_type="text/event-stream")
 
