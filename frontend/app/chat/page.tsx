@@ -15,6 +15,7 @@ export interface DbMessage {
   imageUrl?: string | null;
   videoUrl?: string | null;
   videoStatus?: string;
+  attachments?: { name: string; type: string; size: number }[];
   createdAt: string;
 }
 
@@ -200,7 +201,7 @@ export default function ChatPage() {
     });
   };
 
-  const sendMessage = async (text: string) => {
+  const sendMessage = async (text: string, files: File[] = []) => {
     // A ref guard is synchronous, so rapid Enter/click events cannot start
     // duplicate requests before React has rendered the loading state.
     if (sendInProgressRef.current || loading) return;
@@ -234,13 +235,21 @@ export default function ChatPage() {
     // - If user selected "image": always image
     // - If user selected "chat": always text
     // - If Auto (undefined): detect image intent; default to text!
-    const isImage = model === "image" || (!model && detectImageIntent(text));
+    // Attachments always use multimodal understanding, never the image-generation endpoint.
+    const isImage =
+      files.length === 0 &&
+      (model === "image" || (!model && detectImageIntent(text)));
 
     const tempUserMsg: DbMessage = {
       id: crypto.randomUUID(),
       role: "user",
       content: text,
       type: "text",
+      attachments: files.map((file) => ({
+        name: file.name,
+        type: file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/*"),
+        size: file.size,
+      })),
       createdAt: new Date().toISOString(),
     };
     const tempAsstMsg: DbMessage = {
@@ -305,10 +314,15 @@ export default function ChatPage() {
 
     // ── NORMAL TEXT CHAT (POST /api/chat) ──
     try {
+      const formData = new FormData();
+      formData.append("message", text);
+      formData.append("conversationId", finalConvId);
+      if (model) formData.append("model", model);
+      files.forEach((file) => formData.append("files", file, file.name));
+
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, conversationId: finalConvId }),
+        body: formData,
       });
 
       if (!res.ok) {
