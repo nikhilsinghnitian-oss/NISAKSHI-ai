@@ -7,7 +7,7 @@ import base64
 import logging
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -137,12 +137,81 @@ def ready():
 
 
 # ─────────────────────────────────────────────
-# Protected: Chat (Gemini Text Streaming)
+# Protected: Chat (Gemini Text + PDF/Image Understanding)
 # ─────────────────────────────────────────────
+
+MAX_CHAT_MESSAGE_CHARS = 20000
+MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
+MAX_ATTACHMENT_COUNT = 5
+
+_ATTACHMENT_MIME_BY_EXTENSION = {
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
+
+
+def _read_chat_attachments(files: list[UploadFile]) -> list[tuple[str, str, bytes]]:
+    if len(files) > MAX_ATTACHMENT_COUNT:
+        raise HTTPException(status_code=413, detail="Attach up to 5 files per message.")
+
+    uploads: list[tuple[str, str, bytes]] = []
+    total_bytes = 0
+
+    for upload in files:
+        filename = (upload.filename or "").strip()
+        extension = os.path.splitext(filename.lower())[1]
+        expected_mime = _ATTACHMENT_MIME_BY_EXTENSION.get(extension)
+        if not filename or not expected_mime:
+            raise HTTPException(
+                status_code=415,
+                detail="Only PDF, JPG, JPEG, PNG, and WEBP files are supported.",
+            )
+
+        declared_mime = (upload.content_type or "").split(";")[0].strip().lower()
+        if declared_mime and declared_mime != expected_mime:
+            raise HTTPException(
+                status_code=415,
+                detail=f"The file type for {filename} does not match its extension.",
+            )
+
+        data = upload.file.read(MAX_ATTACHMENT_BYTES + 1)
+        if not data:
+            raise HTTPException(status_code=400, detail=f"{filename} is empty.")
+        if len(data) > MAX_ATTACHMENT_BYTES:
+            raise HTTPException(status_code=413, detail=f"{filename} exceeds the 4 MB file limit.")
+
+        total_bytes += len(data)
+        if total_bytes > MAX_ATTACHMENT_BYTES:
+            raise HTTPException(status_code=413, detail="The combined attachment size must be 4 MB or less.")
+
+        valid_signature = (
+            (expected_mime == "application/pdf" and data.startswith(b"%PDF-"))
+            or (expected_mime == "image/jpeg" and data.startswith(bytes.fromhex("FFD8FF")))
+            or (expected_mime == "image/png" and data.startswith(bytes.fromhex("89504E470D0A1A0A")))
+            or (
+                expected_mime == "image/webp"
+                and len(data) >= 12
+                and data.startswith(b"RIFF")
+                and data[8:12] == b"WEBP"
+            )
+        )
+        if not valid_signature:
+            raise HTTPException(status_code=415, detail=f"{filename} is not a valid {expected_mime} file.")
+
+        uploads.append((filename[:180], expected_mime, data))
+
+    return uploads
+
 
 @app.post("/chat")
 def chat(
-    request: ChatRequest,
+    message: str = Form(default=""),
+    model: str | None = Form(default=None),
+    conversation_id: str | None = Form(default=None),
+    files: list[UploadFile] = File(default=[]),
     authorization: str = Header(default=""),
 ):
     user_id = get_user_id(authorization)
@@ -152,10 +221,22 @@ def chat(
             detail="The backend GEMINI_API_KEY is not configured. Add it to the backend deployment environment.",
         )
 
+    clean_message = message.strip()
+    if len(clean_message) > MAX_CHAT_MESSAGE_CHARS:
+        raise HTTPException(status_code=413, detail="Message is too long. Keep it under 20,000 characters.")
+
+    attachments = _read_chat_attachments(files)
+    if not clean_message and not attachments:
+        raise HTTPException(status_code=400, detail="Enter a message or attach a file.")
+
     def gemini_stream():
-        for update in stream_text(client, request.message, model=request.model):
-            yield f"data: {json.dumps(update)}\n\n"
-        yield "data: [DONE]\n\n"
+        for update in stream_text(
+            client,
+            clean_message,
+            model=model,
+            attachments=attachments,
+        ):
+            yield f"data: {json.dumps(update)}\\n\\n"
 
     return StreamingResponse(gemini_stream(), media_type="text/event-stream")
 
