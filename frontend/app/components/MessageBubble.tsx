@@ -17,6 +17,19 @@ export default function MessageBubble({ message, isStreaming }: Props) {
     return (
       <div className="flex justify-end mb-5">
         <div className="max-w-[80%] rounded-2xl rounded-br-md bg-blue-600 px-4 py-3 text-sm text-white shadow-sm">
+          {message.attachments && message.attachments.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {message.attachments.map((file) => (
+                <span
+                  key={`${file.name}-${file.size}`}
+                  className="inline-flex max-w-[230px] items-center gap-1.5 rounded-lg border border-white/20 bg-blue-700/60 px-2 py-1 text-[10px]"
+                >
+                  <span>{file.type === "application/pdf" ? "📄" : "🖼️"}</span>
+                  <span className="truncate">{file.name}</span>
+                </span>
+              ))}
+            </div>
+          )}
           <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
         </div>
       </div>
