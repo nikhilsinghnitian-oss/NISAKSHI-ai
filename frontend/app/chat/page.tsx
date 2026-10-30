@@ -317,7 +317,6 @@ export default function ChatPage() {
       const formData = new FormData();
       formData.append("message", text);
       formData.append("conversationId", finalConvId);
-      if (model) formData.append("model", model);
       files.forEach((file) => formData.append("files", file, file.name));
 
       const res = await fetch("/api/chat", {
