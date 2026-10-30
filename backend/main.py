@@ -161,7 +161,7 @@ def _read_chat_attachments(files: list[UploadFile]) -> list[tuple[str, str, byte
     total_bytes = 0
 
     for upload in files:
-        filename = (upload.filename or "").strip()
+        filename = os.path.basename((upload.filename or "").replace("\\", "/")).strip()
         extension = os.path.splitext(filename.lower())[1]
         expected_mime = _ATTACHMENT_MIME_BY_EXTENSION.get(extension)
         if not filename or not expected_mime:
@@ -171,7 +171,7 @@ def _read_chat_attachments(files: list[UploadFile]) -> list[tuple[str, str, byte
             )
 
         declared_mime = (upload.content_type or "").split(";")[0].strip().lower()
-        if declared_mime and declared_mime != expected_mime:
+        if declared_mime and declared_mime not in (expected_mime, "application/octet-stream"):
             raise HTTPException(
                 status_code=415,
                 detail=f"The file type for {filename} does not match its extension.",
