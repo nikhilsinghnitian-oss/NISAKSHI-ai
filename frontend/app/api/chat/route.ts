@@ -102,7 +102,7 @@ export async function POST(req: Request) {
   for (const file of files) {
     const extension = file.name.split(".").pop()?.toLowerCase() || "";
     const expectedType = ACCEPTED_TYPES[extension];
-    if (!expectedType || (file.type && file.type !== expectedType)) {
+    if (!expectedType || (file.type && file.type !== expectedType && file.type !== "application/octet-stream")) {
       return NextResponse.json(
         { error: "Only valid PDF, JPG, JPEG, and PNG/WEBP image files are supported." },
         { status: 415 }
