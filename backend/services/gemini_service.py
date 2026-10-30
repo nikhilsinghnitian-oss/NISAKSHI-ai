@@ -80,7 +80,12 @@ def _classify_error(err: str) -> str:
     return "AI service is temporarily unavailable. Please try again."
 
 
-def stream_text(client: genai.Client, message: str, model: str | None = None):
+def stream_text(
+    client: genai.Client,
+    message: str,
+    model: str | None = None,
+    attachments: list[tuple[str, str, bytes]] | None = None,
+):
     """
     Generator that yields text chunks from Gemini streaming.
     Yields dicts: {"text": str} or {"error": str}.
@@ -96,11 +101,14 @@ def stream_text(client: genai.Client, message: str, model: str | None = None):
 
     config = types.GenerateContentConfig(
         system_instruction=(
-            "You are NISAKSHI AI, a personal AI tutor and creator designed for "
-            "students and engineers. Always introduce or refer to yourself only "
-            "as NISAKSHI AI. Answer directly and concisely by default. For greetings "
-            "or simple questions, respond immediately without an elaborate preamble. "
-            "Provide more detail when the user asks for it."
+            "You are a helpful, capable AI assistant for students and engineers. "
+            "Answer naturally and directly. Do not introduce yourself, repeat your name, "
+            "or add a branded sign-off to every response. Identify yourself as NISAKSHI AI "
+            "only when the user explicitly asks who you are. Match the user's language and "
+            "requested level of detail. For academic problems, explain the method clearly, "
+            "show necessary steps, preserve question numbering, and state when an uploaded "
+            "scan or part of a document is unreadable. Never invent details that are not "
+            "visible or supported by the supplied material."
         ),
         # Gemini 3.8 Flash defaults to medium thinking; low reduces time-to-first-token.
         thinking_config=types.ThinkingConfig(
@@ -121,7 +129,22 @@ def stream_text(client: genai.Client, message: str, model: str | None = None):
             got_data = False
             for chunk in client.models.generate_content_stream(
                 model=target_model,
-                contents=message,
+                contents=[
+                    types.Part.from_text(
+                        text=(
+                            message.strip()
+                            or "Please analyze the attached file(s) and explain the relevant content."
+                        )
+                    ),
+                    *[
+                        part
+                        for filename, mime_type, data in (attachments or [])
+                        for part in (
+                            types.Part.from_text(text=f"Attached file: {filename}"),
+                            types.Part.from_bytes(data=data, mime_type=mime_type),
+                        )
+                    ],
+                ],
                 config=config,
             ):
                 text = chunk.text
