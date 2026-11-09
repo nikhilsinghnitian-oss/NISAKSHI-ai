@@ -158,7 +158,7 @@ export default function Sidebar({
 
       <aside
         className={`
-          fixed inset-y-0 left-0 z-50 flex w-72 flex-col
+          ns-sidebar fixed inset-y-0 left-0 z-50 flex w-72 flex-col
           border-r border-slate-800/60 bg-slate-950
           transform transition-transform duration-200 ease-in-out
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
@@ -167,7 +167,7 @@ export default function Sidebar({
         `}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800/60 p-4">
+        <div className="ns-sidebar-header flex items-center justify-between border-b border-slate-800/60 p-4">
           <div>
             <h1 className="text-base font-bold tracking-tight text-white">NISAKSHI AI</h1>
             <p className="text-[10px] font-medium uppercase tracking-widest text-blue-400/70">
@@ -188,7 +188,7 @@ export default function Sidebar({
         <div className="px-3 pt-3 pb-2">
           <button
             onClick={onNewChat}
-            className="flex w-full items-center gap-2.5 rounded-xl border border-slate-700/60 bg-slate-900/50 px-4 py-2.5 text-sm text-slate-300 hover:border-blue-500/40 hover:bg-blue-500/10 hover:text-blue-300 transition-all duration-150"
+            className="ns-new-chat flex w-full items-center gap-2.5 rounded-xl border border-slate-700/60 bg-slate-900/50 px-4 py-2.5 text-sm text-slate-300 hover:border-blue-500/40 hover:bg-blue-500/10 hover:text-blue-300 transition-all duration-150"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
