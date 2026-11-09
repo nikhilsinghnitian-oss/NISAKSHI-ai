@@ -95,7 +95,20 @@ a { color: inherit; text-decoration: none; }
 .ns-particles { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .8; }
 .ns-landing[data-phase="transition"] .ns-glow-primary,
 .ns-landing[data-phase="complete"] .ns-glow-primary { width: 120vw; height: 120vh; opacity: .34; }
-.ns-landing-content { position: relative; z-index: 1; }
+.ns-landing-content {
+  position: relative;
+  z-index: 1;
+  opacity: 0;
+  transform: translateY(16px);
+  pointer-events: none;
+  transition: opacity .7s ease, transform .7s ease;
+}
+.ns-landing[data-phase="transition"] .ns-landing-content,
+.ns-landing[data-phase="complete"] .ns-landing-content {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
 .ns-landing-header {
   width: min(100% - 64px, 1320px);
   margin: 0 auto;
