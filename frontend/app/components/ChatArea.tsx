@@ -218,6 +218,7 @@ export default function ChatArea({
             className="ns-mode-button"
             aria-pressed={mode === "general"}
             onClick={() => onUpdateMode("general")}
+            title="Switching modes with an existing thread starts a new conversation"
             disabled={loading}
           >
             <span className="ns-mode-icon" aria-hidden="true">✦</span>
@@ -228,6 +229,7 @@ export default function ChatArea({
             className="ns-mode-button study"
             aria-pressed={mode === "study"}
             onClick={() => onUpdateMode("study")}
+            title="Switching modes with an existing thread starts a new conversation"
             disabled={loading}
           >
             <span className="ns-mode-icon" aria-hidden="true">⌂</span>
@@ -246,6 +248,11 @@ export default function ChatArea({
 
       {/* Messages */}
       <div className="ns-chat-messages flex-1 overflow-y-auto">
+        {mode === "study" && messages.length > 0 && (
+          <div className="ns-study-notice mx-auto mt-4 w-[calc(100%-2rem)] max-w-3xl" role="status">
+            <strong>Study Mode · Source-only guard.</strong> Verified academic retrieval is not connected yet. New questions will not be sent to General Chat or answered from unverified academic knowledge.
+          </div>
+        )}
         {messages.length > 0 ? (
           <div className="mx-auto max-w-3xl px-4 py-6">
             {messages.map((msg, idx) => (
