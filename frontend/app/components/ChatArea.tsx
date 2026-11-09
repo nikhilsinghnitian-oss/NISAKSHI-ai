@@ -6,12 +6,16 @@ import type { DbMessage, DbConversation } from "../chat/page";
 import MessageBubble from "./MessageBubble";
 import ModelSelector from "./ModelSelector";
 
+export type ChatMode = "general" | "study";
+
 interface Props {
   conversation: DbConversation | null;
   messages: DbMessage[];
   loading: boolean;
   selectedModel: string | undefined;
-  onSendMessage: (message: string, files: File[]) => void;
+  mode: ChatMode;
+  onSendMessage: (message: string, files: File[], mode: ChatMode) => void;
+  onUpdateMode: (mode: ChatMode) => void;
   onUpdateModel: (model: string | undefined) => void;
   onToggleSidebar: () => void;
 }
@@ -44,12 +48,21 @@ function formatBytes(bytes: number): string {
     : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const GENERAL_SUGGESTIONS = [
+  { label: "Explore an idea", prompt: "Help me explore " },
+  { label: "Understand technology", prompt: "Explain " },
+  { label: "Plan a project", prompt: "Help me plan " },
+  { label: "Write something", prompt: "Help me write " },
+];
+
 export default function ChatArea({
   conversation,
   messages,
   loading,
   selectedModel,
+  mode,
   onSendMessage,
+  onUpdateMode,
   onUpdateModel,
   onToggleSidebar,
 }: Props) {
@@ -124,7 +137,7 @@ export default function ChatArea({
     const text = input.trim();
     if ((!text && selectedFiles.length === 0) || loading) return;
     const prompt = text || "Please analyze the attached file(s) and explain the relevant content.";
-    onSendMessage(prompt, selectedFiles);
+    onSendMessage(prompt, selectedFiles, mode);
     setInput("");
     if (inputRef.current) inputRef.current.style.height = "24px";
     setAttachmentError("");
@@ -136,7 +149,7 @@ export default function ChatArea({
     if (!loading) addFiles(Array.from(event.dataTransfer.files));
   };
 
-  const isImage = selectedModel === "image";
+  const isImage = mode === "general" && selectedModel === "image";
   const badge = selectedModel ? MODEL_BADGE[selectedModel] : null;
   const placeholder = isImage && selectedFiles.length === 0
     ? "Describe an image to create..."
@@ -144,7 +157,7 @@ export default function ChatArea({
 
   return (
     <div
-      className="relative flex min-w-0 flex-1 flex-col"
+      className="ns-chat-main relative flex min-w-0 flex-1 flex-col"
       onDragOver={(event) => {
         event.preventDefault();
         if (!loading) setIsDragging(true);
@@ -173,7 +186,7 @@ export default function ChatArea({
       />
 
       {/* Header */}
-      <header className="flex items-center gap-3 border-b border-slate-800/60 bg-slate-950 px-4 py-3">
+      <header className="ns-chat-header flex items-center gap-3 border-b border-slate-800/60 bg-slate-950 px-4 py-3">
         <button
           onClick={onToggleSidebar}
           aria-label="Toggle sidebar"
@@ -188,17 +201,51 @@ export default function ChatArea({
           <h2 className="truncate text-sm font-medium text-slate-200">
             {conversation?.title || "New Chat"}
           </h2>
-          {badge && (
+          {mode === "study" ? (
+            <span className="shrink-0 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-semibold tracking-wide text-cyan-200">
+              SOURCE-ONLY
+            </span>
+          ) : badge ? (
             <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${badge.color}`}>
               {badge.label}
             </span>
-          )}
+          ) : null}
         </div>
-        <ModelSelector selectedModel={selectedModel} onSelectModel={onUpdateModel} />
+
+        <div className="ns-mode-switch" role="group" aria-label="Conversation mode">
+          <button
+            type="button"
+            className="ns-mode-button"
+            aria-pressed={mode === "general"}
+            onClick={() => onUpdateMode("general")}
+            disabled={loading}
+          >
+            <span className="ns-mode-icon" aria-hidden="true">✦</span>
+            General Chat
+          </button>
+          <button
+            type="button"
+            className="ns-mode-button study"
+            aria-pressed={mode === "study"}
+            onClick={() => onUpdateMode("study")}
+            disabled={loading}
+          >
+            <span className="ns-mode-icon" aria-hidden="true">⌂</span>
+            Study Mode
+          </button>
+        </div>
+
+        {mode === "general" ? (
+          <ModelSelector selectedModel={selectedModel} onSelectModel={onUpdateModel} />
+        ) : (
+          <span className="hidden text-[9px] font-medium tracking-wide text-cyan-100/60 lg:inline">
+            VERIFIED SOURCES ONLY
+          </span>
+        )}
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="ns-chat-messages flex-1 overflow-y-auto">
         {messages.length > 0 ? (
           <div className="mx-auto max-w-3xl px-4 py-6">
             {messages.map((msg, idx) => (
@@ -211,22 +258,32 @@ export default function ChatArea({
             <div ref={messagesEndRef} />
           </div>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center px-4 py-8 text-center">
-            <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/5">
-              <span className="text-2xl">✦</span>
+          <div className="ns-empty-state flex h-full flex-col items-center justify-center px-4 py-8 text-center">
+            <div className="ns-empty-orb">
+              <span aria-hidden="true">{mode === "study" ? "⌂" : "✦"}</span>
             </div>
-            <h2 className="mb-2 text-2xl font-bold tracking-tight text-white">
-              What would you like to{" "}
-              <span className="text-blue-400">{isImage ? "create" : "learn"}</span>?
+            <h2 className="ns-empty-title">
+              {mode === "study"
+                ? "Learn from your academic sources."
+                : isImage
+                  ? "What would you like to create?"
+                  : "What shall we explore today?"}
             </h2>
-            <p className="mb-8 max-w-sm text-sm text-slate-500">
-              {isImage
-                ? "Describe an image, or attach a file to ask questions about it."
-                : "Ask questions, solve PYQs, revise topics, or upload an assignment PDF or image."}
+            <p className="ns-empty-subtitle">
+              {mode === "study"
+                ? "Ask about your selected curriculum, notes, assignments or previous-year questions. Answers must be supported by your approved academic material."
+                : isImage
+                  ? "Describe an image, or attach a file to ask questions about it."
+                  : "Think freely, research an idea, write code, plan a project or ask NISAKSHI anything."}
             </p>
+            {mode === "study" && (
+              <div className="ns-study-notice" role="status">
+                <strong>Academic source guard is active.</strong> Verified curriculum retrieval is not connected yet. Until approved documents and retrieval are configured, Study Mode will not send your question to General Chat or generate an unverified academic answer.
+              </div>
+            )}
             {!isImage && (
               <div className="flex flex-wrap justify-center gap-2">
-                {SUGGESTIONS.map((suggestion) => (
+                {(mode === "study" ? SUGGESTIONS : GENERAL_SUGGESTIONS).map((suggestion) => (
                   <button
                     key={suggestion.label}
                     onClick={() => setInput(suggestion.prompt)}
@@ -242,7 +299,7 @@ export default function ChatArea({
       </div>
 
       {/* Composer */}
-      <div className="border-t border-slate-800/60 bg-slate-950 px-4 py-4">
+      <div className="ns-composer-dock border-t border-slate-800/60 bg-slate-950 px-4 py-4">
         <div className="mx-auto max-w-3xl">
           {selectedFiles.length > 0 && (
             <div className="mb-3 flex flex-wrap gap-2">
@@ -277,7 +334,7 @@ export default function ChatArea({
             <p role="alert" className="mb-2 text-xs text-rose-400">{attachmentError}</p>
           )}
 
-          <div className="flex items-end gap-2 rounded-2xl border border-slate-700/60 bg-slate-900 px-3 py-3 transition-colors focus-within:border-blue-500/40">
+          <div className="ns-composer flex items-end gap-2 rounded-2xl border border-slate-700/60 bg-slate-900 px-3 py-3 transition-colors focus-within:border-blue-500/40">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -314,7 +371,7 @@ export default function ChatArea({
               onClick={handleSend}
               disabled={loading || (!input.trim() && selectedFiles.length === 0)}
               aria-label="Send message"
-              className="mb-0.5 flex shrink-0 items-center justify-center rounded-xl bg-blue-600 p-2.5 text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
+              className="ns-composer-send mb-0.5 flex shrink-0 items-center justify-center rounded-xl bg-blue-600 p-2.5 text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
             >
               {loading ? (
                 <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
