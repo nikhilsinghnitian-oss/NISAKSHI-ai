@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Sidebar from "../components/Sidebar";
-import ChatArea from "../components/ChatArea";
+import ChatArea, { type ChatMode } from "../components/ChatArea";
 
 export interface DbMessage {
   id: string;
@@ -60,6 +60,8 @@ export default function ChatPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeMessages, setActiveMessages] = useState<DbMessage[]>([]);
   const [selectedModel, setSelectedModel] = useState<string | undefined>(undefined);
+  const [conversationModes, setConversationModes] = useState<Record<string, ChatMode>>({});
+  const [modesReady, setModesReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [ready, setReady] = useState(false);
@@ -74,6 +76,40 @@ export default function ChatPage() {
       setSidebarOpen(false);
     }
   }, []);
+
+  // Mode is stored per conversation in this browser for the initial UI release.
+  // The Prisma schema does not yet contain a mode column; cross-device sync is a later migration.
+  useEffect(() => {
+    if (status !== "authenticated" || !session?.user?.email) return;
+
+    const storageKey = `nisakshi:conversation-modes:${session.user.email.toLowerCase()}`;
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      const parsed = raw ? JSON.parse(raw) : {};
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const validModes = Object.fromEntries(
+          Object.entries(parsed).filter(
+            ([, value]) => value === "general" || value === "study"
+          )
+        ) as Record<string, ChatMode>;
+        setConversationModes(validModes);
+      }
+    } catch (error) {
+      console.warn("Could not restore conversation modes:", error);
+    } finally {
+      setModesReady(true);
+    }
+  }, [status, session?.user?.email]);
+
+  useEffect(() => {
+    if (!modesReady || status !== "authenticated" || !session?.user?.email) return;
+    const storageKey = `nisakshi:conversation-modes:${session.user.email.toLowerCase()}`;
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(conversationModes));
+    } catch (error) {
+      console.warn("Could not persist conversation modes:", error);
+    }
+  }, [conversationModes, modesReady, status, session?.user?.email]);
 
   const loadConversations = useCallback(async () => {
     try {
@@ -139,7 +175,7 @@ export default function ChatPage() {
     return data.conversation as DbConversation;
   };
 
-  const handleNewChat = async () => {
+  const handleNewChat = async (initialMode: ChatMode = "general") => {
     const conv = await createConversation("New Chat");
     if (!conv) return;
     setConversations((prev) => [conv, ...prev]);
@@ -147,6 +183,7 @@ export default function ChatPage() {
     setActiveId(conv.id);
     setActiveMessages([]);
     setSelectedModel(undefined);
+    setConversationModes((prev) => ({ ...prev, [conv.id]: initialMode }));
     if (typeof window !== "undefined" && window.innerWidth < 768) {
       setSidebarOpen(false);
     }
@@ -163,10 +200,35 @@ export default function ChatPage() {
   const handleDeleteChat = async (id: string) => {
     await fetch(`/api/conversations/${id}`, { method: "DELETE" });
     setConversations((prev) => prev.filter((c) => c.id !== id));
+    setConversationModes((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
     if (id === activeId) {
       setActiveId(null);
       setActiveMessages([]);
     }
+  };
+
+  const handleUpdateMode = (mode: ChatMode) => {
+    if (!activeId) {
+      void handleNewChat(mode);
+      return;
+    }
+
+    setConversationModes((prev) => ({ ...prev, [activeId]: mode }));
+    if (mode === "study") {
+      // Study Mode is text/RAG-only; do not carry an image-generation choice into it.
+      setSelectedModel("chat");
+    } else {
+      setSelectedModel(undefined);
+    }
+  };
+
+  const handleUpdateModel = (model: string | undefined) => {
+    if (activeMode === "study" && model === "image") return;
+    setSelectedModel(model);
   };
 
   const handleRenameChat = async (id: string, newTitle: string) => {
@@ -201,7 +263,7 @@ export default function ChatPage() {
     });
   };
 
-  const sendMessage = async (text: string, files: File[] = []) => {
+  const sendMessage = async (text: string, files: File[] = [], mode: ChatMode = "general") => {
     // A ref guard is synchronous, so rapid Enter/click events cannot start
     // duplicate requests before React has rendered the loading state.
     if (sendInProgressRef.current || loading) return;
@@ -220,6 +282,7 @@ export default function ChatPage() {
       setConversations((prev) => [conv, ...prev]);
       skipNextMessageLoadRef.current = convId;
       setActiveId(convId);
+      setConversationModes((prev) => ({ ...prev, [convId as string]: mode }));
     } else {
       const activeConv = conversations.find((c) => c.id === convId);
       if (activeConv && activeConv.title === "New Chat" && activeMessages.length === 0) {
@@ -237,6 +300,7 @@ export default function ChatPage() {
     // - If Auto (undefined): detect image intent; default to text!
     // Attachments always use multimodal understanding, never the image-generation endpoint.
     const isImage =
+      mode === "general" &&
       files.length === 0 &&
       (model === "image" || (!model && detectImageIntent(text)));
 
@@ -317,6 +381,7 @@ export default function ChatPage() {
       const formData = new FormData();
       formData.append("message", text);
       formData.append("conversationId", finalConvId);
+      formData.append("mode", mode);
       files.forEach((file) => formData.append("files", file, file.name));
 
       const res = await fetch("/api/chat", {
@@ -412,9 +477,10 @@ export default function ChatPage() {
   }
 
   const activeConversation = conversations.find((c) => c.id === activeId) || null;
+  const activeMode: ChatMode = activeId ? conversationModes[activeId] ?? "general" : "general";
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-950 text-white">
+    <div className="ns-chat-shell flex h-screen overflow-hidden text-white">
       <Sidebar
         conversations={conversations}
         activeId={activeId}
@@ -430,8 +496,10 @@ export default function ChatPage() {
         messages={activeMessages}
         loading={loading}
         selectedModel={selectedModel}
+        mode={activeMode}
         onSendMessage={sendMessage}
-        onUpdateModel={setSelectedModel}
+        onUpdateMode={handleUpdateMode}
+        onUpdateModel={handleUpdateModel}
         onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
       />
     </div>
