@@ -151,9 +151,12 @@ export default function ChatArea({
 
   const isImage = mode === "general" && selectedModel === "image";
   const badge = selectedModel ? MODEL_BADGE[selectedModel] : null;
-  const placeholder = isImage && selectedFiles.length === 0
-    ? "Describe an image to create..."
-    : "Ask a question or attach a PDF/image...";
+  const placeholder =
+    mode === "study"
+      ? "Ask about your selected curriculum or verified academic material..."
+      : isImage && selectedFiles.length === 0
+        ? "Describe an image to create..."
+        : "Ask anything, or attach a PDF/image...";
 
   return (
     <div
