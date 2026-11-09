@@ -47,20 +47,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!BACKEND_URL) {
-    return NextResponse.json(
-      {
-        error:
-          "AI backend is not configured. Add BACKEND_URL in Vercel → Settings → Environment Variables, then redeploy.",
-        code: "BACKEND_URL_MISSING",
-      },
-      { status: 503 }
-    );
-  }
-
   let message = "";
   let conversationId = "";
   let model = "";
+  let mode: "general" | "study" = "general";
   let files: File[] = [];
 
   try {
@@ -70,9 +60,11 @@ export async function POST(req: Request) {
       const messageValue = incoming.get("message");
       const conversationValue = incoming.get("conversationId");
       const modelValue = incoming.get("model");
+      const modeValue = incoming.get("mode");
       message = typeof messageValue === "string" ? messageValue : "";
       conversationId = typeof conversationValue === "string" ? conversationValue : "";
       model = typeof modelValue === "string" ? modelValue : "";
+      mode = modeValue === "study" ? "study" : "general";
       files = incoming.getAll("files").filter((entry): entry is File => entry instanceof File);
     } else {
       // Keep compatibility with older JSON-only chat callers.
@@ -80,9 +72,32 @@ export async function POST(req: Request) {
       message = typeof body.message === "string" ? body.message : "";
       conversationId = typeof body.conversationId === "string" ? body.conversationId : "";
       model = typeof body.model === "string" ? body.model : "";
+      mode = body.mode === "study" ? "study" : "general";
     }
   } catch {
     return NextResponse.json({ error: "Could not read the chat request." }, { status: 400 });
+  }
+
+  if (mode === "study") {
+    return NextResponse.json(
+      {
+        error:
+          "Study Mode is locked to verified academic sources. The academic retrieval pipeline is not connected yet, so this question was not sent to General Chat. Connect the selected institution, curriculum and approved documents before using Study Mode.",
+        code: "STUDY_RAG_NOT_CONFIGURED",
+      },
+      { status: 503 }
+    );
+  }
+
+  if (!BACKEND_URL) {
+    return NextResponse.json(
+      {
+        error:
+          "AI backend is not configured. Add BACKEND_URL in Vercel → Settings → Environment Variables, then redeploy.",
+        code: "BACKEND_URL_MISSING",
+      },
+      { status: 503 }
+    );
   }
 
   if (!message.trim() && files.length === 0) {
