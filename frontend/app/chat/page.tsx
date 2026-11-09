@@ -217,6 +217,13 @@ export default function ChatPage() {
       return;
     }
 
+    // A conversation keeps one mode. Switching modes with an existing thread
+    // starts a clean conversation so General and Study answers are never mixed.
+    if (activeMessages.length > 0 && conversationModes[activeId] !== mode) {
+      void handleNewChat(mode);
+      return;
+    }
+
     setConversationModes((prev) => ({ ...prev, [activeId]: mode }));
     if (mode === "study") {
       // Study Mode is text/RAG-only; do not carry an image-generation choice into it.
